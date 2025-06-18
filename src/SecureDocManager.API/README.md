@@ -44,19 +44,19 @@ dotnet user-secrets set "AzureAd:ClientSecret" "your-client-secret"
 
 ### Desenvolvimento Local
 
-1. Instalar dependências:
+#### 1. Instalar dependências
 
 ```bash
 dotnet restore
 ```
 
-2. Criar o banco de dados:
+#### 2. Criar o banco de dados
 
 ```bash
 dotnet ef database update
 ```
 
-3. Executar a aplicação:
+#### 3. Executar a aplicação
 
 ```bash
 dotnet run
