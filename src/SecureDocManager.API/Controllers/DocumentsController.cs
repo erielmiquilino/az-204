@@ -17,6 +17,8 @@ namespace SecureDocManager.API.Controllers
         private readonly IDocumentService _documentService;
         private readonly ICosmosService _cosmosService;
         private readonly IGraphService _graphService;
+        private readonly IAuditService _auditService;
+        private readonly IDocumentSigningService _documentSigningService;
         private readonly ApplicationDbContext _context;
         private readonly ILogger<DocumentsController> _logger;
 
@@ -24,12 +26,16 @@ namespace SecureDocManager.API.Controllers
             IDocumentService documentService,
             ICosmosService cosmosService,
             IGraphService graphService,
+            IAuditService auditService,
+            IDocumentSigningService documentSigningService,
             ApplicationDbContext context,
             ILogger<DocumentsController> logger)
         {
             _documentService = documentService;
             _cosmosService = cosmosService;
             _graphService = graphService;
+            _auditService = auditService;
+            _documentSigningService = documentSigningService;
             _context = context;
             _logger = logger;
         }
@@ -73,7 +79,7 @@ namespace SecureDocManager.API.Controllers
                 await _context.SaveChangesAsync();
 
                 // Registrar no log de auditoria
-                await LogAuditAsync(userId, document.Id, "Upload");
+                await _auditService.LogAccessAsync(userId, User.Identity?.Name ?? "Unknown", document.Id, "DocumentUploaded", HttpContext.Connection.RemoteIpAddress?.ToString());
 
                 return Ok(new { documentId = document.Id, message = "Documento enviado com sucesso" });
             }
@@ -81,6 +87,40 @@ namespace SecureDocManager.API.Controllers
             {
                 _logger.LogError(ex, "Erro ao fazer upload do documento");
                 return StatusCode(500, "Erro ao processar o upload");
+            }
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetDocuments()
+        {
+            try
+            {
+                var userRole = GetUserRole();
+                var documents = await _documentService.GetAllDocumentsAsync(userRole);
+                
+                var response = documents.Select(d => new DocumentResponseDto
+                {
+                    Id = d.Id,
+                    FileName = d.FileName,
+                    FileExtension = d.FileExtension,
+                    FileSizeInBytes = d.FileSizeInBytes,
+                    DepartmentId = d.DepartmentId,
+                    UploadedByUserName = d.UploadedByUserName,
+                    UploadedAt = d.UploadedAt,
+                    Description = d.Description,
+                    AccessLevel = d.AccessLevel,
+                    IsSigned = d.IsSigned,
+                    Tags = string.IsNullOrEmpty(d.Tags)
+                        ? new List<string>()
+                        : d.Tags.Split(',').Select(t => t.Trim()).ToList()
+                });
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao obter todos os documentos");
+                return StatusCode(500, "Erro ao processar requisição");
             }
         }
 
@@ -138,6 +178,15 @@ namespace SecureDocManager.API.Controllers
                         IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString()
                     });
 
+                // Registrar no log de auditoria
+                await _auditService.LogAccessAsync(
+                    userId ?? "", 
+                    User.Identity?.Name ?? "Unknown", 
+                    document.Id, 
+                    "DocumentViewed", 
+                    HttpContext.Connection.RemoteIpAddress?.ToString()
+                );
+
                 return Ok(response);
             }
             catch (Exception ex)
@@ -188,31 +237,72 @@ namespace SecureDocManager.API.Controllers
             try
             {
                 var userId = User.GetObjectId();
-                var document = await _documentService.GetDocumentByIdAsync(dto.DocumentId);
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized();
+                }
 
+                // Criar URL de documento assinado
+                var signedDocumentUrl = await _documentSigningService.CreateSignedDocumentUrlAsync(dto.DocumentId, userId);
+
+                // Atualizar documento como assinado
+                var document = await _documentService.GetDocumentByIdAsync(dto.DocumentId);
                 if (document == null)
                 {
                     return NotFound();
                 }
 
-                // Baixar o documento do blob storage
-                // var documentBytes = await DownloadDocumentBytesAsync(document);
-                // var signature = await _documentService.SignDocumentAsync(documentBytes, dto.CertificateName);
-
-                // Atualizar documento como assinado
                 document.IsSigned = true;
                 document.SignedAt = DateTime.UtcNow;
                 document.SignedByUserId = userId;
                 await _context.SaveChangesAsync();
 
-                await LogAuditAsync(userId ?? "", document.Id, "Sign");
-
-                return Ok(new { message = "Documento assinado com sucesso" });
+                return Ok(new 
+                { 
+                    message = "Documento assinado com sucesso",
+                    signedDocumentUrl = signedDocumentUrl
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning(ex, "Acesso negado ao assinar documento");
+                return Forbid(ex.Message);
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogWarning(ex, "Argumento inválido ao assinar documento");
+                return BadRequest(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Erro ao assinar documento");
                 return StatusCode(500, "Erro ao processar assinatura");
+            }
+        }
+
+        [HttpPost("{id}/verify-signature")]
+        public async Task<IActionResult> VerifySignature(int id)
+        {
+            try
+            {
+                var signature = await _documentSigningService.GetDocumentSignatureAsync(id);
+                
+                // Registrar verificação no log
+                var userId = User.GetObjectId() ?? "";
+                await _auditService.LogAccessAsync(
+                    userId, 
+                    User.Identity?.Name ?? "Unknown", 
+                    id, 
+                    "SignatureVerified", 
+                    HttpContext.Connection.RemoteIpAddress?.ToString()
+                );
+
+                return Ok(signature);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao verificar assinatura do documento {DocumentId}", id);
+                return StatusCode(500, "Erro ao verificar assinatura");
             }
         }
 
@@ -230,7 +320,7 @@ namespace SecureDocManager.API.Controllers
                     return NotFound();
                 }
 
-                await LogAuditAsync(userId ?? "", id, "Delete");
+                await _auditService.LogAccessAsync(userId ?? "", User.Identity?.Name ?? "Unknown", id, "DocumentDeleted", HttpContext.Connection.RemoteIpAddress?.ToString());
 
                 return Ok(new { message = "Documento deletado com sucesso" });
             }
@@ -291,20 +381,6 @@ namespace SecureDocManager.API.Controllers
             };
         }
 
-        private async Task LogAuditAsync(string userId, int documentId, string action)
-        {
-            var auditLog = new AuditLog
-            {
-                UserId = userId,
-                UserName = User.Identity?.Name ?? "Unknown",
-                DocumentId = documentId,
-                Action = action,
-                Timestamp = DateTime.UtcNow,
-                IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString()
-            };
 
-            _context.AuditLogs.Add(auditLog);
-            await _context.SaveChangesAsync();
-        }
     }
 }

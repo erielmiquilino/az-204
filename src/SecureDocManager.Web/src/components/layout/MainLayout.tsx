@@ -1,345 +1,232 @@
-import React, { useState } from "react";
-import {
-  AppBar,
-  Box,
-  CssBaseline,
-  Drawer,
-  IconButton,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Toolbar,
-  Typography,
-  Avatar,
-  Menu,
-  MenuItem,
-  Divider,
-  Badge,
-  Chip,
-  useTheme,
-  Tooltip,
-} from "@mui/material";
+import * as React from "react";
+import { styled, createTheme, ThemeProvider } from "@mui/material/styles";
+import CssBaseline from "@mui/material/CssBaseline";
+import MuiDrawer from "@mui/material/Drawer";
+import Box from "@mui/material/Box";
+import MuiAppBar, { type AppBarProps as MuiAppBarProps } from "@mui/material/AppBar";
+import Toolbar from "@mui/material/Toolbar";
+import List from "@mui/material/List";
+import Typography from "@mui/material/Typography";
+import Divider from "@mui/material/Divider";
+import IconButton from "@mui/material/IconButton";
+import Badge from "@mui/material/Badge";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
 import {
   Menu as MenuIcon,
-  Description as DocumentIcon,
-  Dashboard,
-  People,
-  Settings,
-  Logout,
-  CloudUpload,
-  History,
-  Security,
+  ChevronLeft as ChevronLeftIcon,
   AccountCircle,
   Notifications,
 } from "@mui/icons-material";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useAuth } from "../../contexts/AuthContext";
-import { UserRole } from "../../types";
+import { useAuth } from "../../contexts/useAuth";
+import MainListItems from "./listItems";
 
 const drawerWidth = 240;
+
+interface AppBarProps extends MuiAppBarProps {
+  open?: boolean;
+}
+
+const AppBar = styled(MuiAppBar, {
+  shouldForwardProp: (prop) => prop !== "open",
+})<AppBarProps>(({ theme, open }) => ({
+  zIndex: theme.zIndex.drawer + 1,
+  transition: theme.transitions.create(["width", "margin"], {
+    easing: theme.transitions.easing.sharp,
+    duration: theme.transitions.duration.leavingScreen,
+  }),
+  ...(open && {
+    marginLeft: drawerWidth,
+    width: `calc(100% - ${drawerWidth}px)`,
+    transition: theme.transitions.create(["width", "margin"], {
+      easing: theme.transitions.easing.sharp,
+      duration: theme.transitions.duration.enteringScreen,
+    }),
+  }),
+}));
+
+const Drawer = styled(MuiDrawer, {
+  shouldForwardProp: (prop) => prop !== "open",
+})(({ theme, open }) => ({
+  "& .MuiDrawer-paper": {
+    position: "relative",
+    whiteSpace: "nowrap",
+    width: drawerWidth,
+    transition: theme.transitions.create("width", {
+      easing: theme.transitions.easing.sharp,
+      duration: theme.transitions.duration.enteringScreen,
+    }),
+    boxSizing: "border-box",
+    ...(!open && {
+      overflowX: "hidden",
+      transition: theme.transitions.create("width", {
+        easing: theme.transitions.easing.sharp,
+        duration: theme.transitions.duration.leavingScreen,
+      }),
+      width: theme.spacing(7),
+      [theme.breakpoints.up("sm")]: {
+        width: theme.spacing(9),
+      },
+    }),
+  },
+}));
+
+const mdTheme = createTheme();
 
 interface MainLayoutProps {
   children: React.ReactNode;
 }
 
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
-  const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [open, setOpen] = React.useState(true);
+  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
 
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
+  const toggleDrawer = () => {
+    setOpen(!open);
   };
 
-  const handleProfileMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+  const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
   };
 
-  const handleProfileMenuClose = () => {
+  const handleClose = () => {
     setAnchorEl(null);
   };
 
   const handleLogout = () => {
-    handleProfileMenuClose();
     logout();
+    handleClose();
   };
 
-  const handleNavigate = (path: string) => {
-    navigate(path);
-    setMobileOpen(false);
+  const handleProfile = () => {
+    navigate("/profile");
+    handleClose();
   };
 
-  const menuItems = [
-    {
-      text: "Dashboard",
-      icon: <Dashboard />,
-      path: "/",
-      roles: [UserRole.Admin, UserRole.Manager, UserRole.Employee],
-    },
-    {
-      text: "Documentos",
-      icon: <DocumentIcon />,
-      path: "/documents",
-      roles: [UserRole.Admin, UserRole.Manager, UserRole.Employee],
-    },
-    {
-      text: "Upload",
-      icon: <CloudUpload />,
-      path: "/upload",
-      roles: [UserRole.Admin, UserRole.Manager, UserRole.Employee],
-    },
-    {
-      text: "Usuários",
-      icon: <People />,
-      path: "/users",
-      roles: [UserRole.Admin],
-    },
-    {
-      text: "Auditoria",
-      icon: <History />,
-      path: "/audit",
-      roles: [UserRole.Admin, UserRole.Manager],
-    },
-    {
-      text: "Configurações",
-      icon: <Settings />,
-      path: "/settings",
-      roles: [UserRole.Admin],
-    },
-  ];
-
-  const filteredMenuItems = menuItems.filter(
-    (item) => user && item.roles.includes(user.role)
-  );
-
-  const getRoleColor = (role: UserRole) => {
-    switch (role) {
-      case UserRole.Admin:
-        return "error";
-      case UserRole.Manager:
-        return "warning";
-      case UserRole.Employee:
-        return "info";
-      default:
-        return "default";
-    }
+  const getPageTitle = (pathname: string) => {
+    const routeMap: { [key: string]: string } = {
+      "/": "Dashboard",
+      "/documents": "Documentos",
+      "/documents/upload": "Upload de Documento",
+      "/users": "Usuários",
+      "/audit": "Auditoria",
+      "/settings": "Configurações",
+      "/profile": "Meu Perfil",
+    };
+    return routeMap[pathname] || "Secure Doc Manager";
   };
-
-  const drawer = (
-    <div>
-      <Toolbar>
-        <Security sx={{ mr: 1, color: theme.palette.primary.main }} />
-        <Typography variant="h6" noWrap component="div">
-          SecureDoc
-        </Typography>
-      </Toolbar>
-      <Divider />
-      <List>
-        {filteredMenuItems.map((item) => (
-          <ListItem key={item.text} disablePadding>
-            <ListItemButton
-              onClick={() => handleNavigate(item.path)}
-              selected={location.pathname === item.path}
-              sx={{
-                "&.Mui-selected": {
-                  backgroundColor: theme.palette.action.selected,
-                  borderRight: `3px solid ${theme.palette.primary.main}`,
-                },
-              }}
-            >
-              <ListItemIcon
-                sx={{
-                  color:
-                    location.pathname === item.path
-                      ? theme.palette.primary.main
-                      : undefined,
-                }}
-              >
-                {item.icon}
-              </ListItemIcon>
-              <ListItemText primary={item.text} />
-            </ListItemButton>
-          </ListItem>
-        ))}
-      </List>
-    </div>
-  );
+  
+  if (!user) {
+    return <>{children}</>;
+  }
 
   return (
-    <Box sx={{ display: "flex" }}>
-      <CssBaseline />
-      <AppBar
-        position="fixed"
-        sx={{
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
-          ml: { sm: `${drawerWidth}px` },
-        }}
-      >
-        <Toolbar>
-          <IconButton
-            color="inherit"
-            aria-label="open drawer"
-            edge="start"
-            onClick={handleDrawerToggle}
-            sx={{ mr: 2, display: { sm: "none" } }}
+    <ThemeProvider theme={mdTheme}>
+      <Box sx={{ display: "flex" }}>
+        <CssBaseline />
+        <AppBar position="absolute" open={open}>
+          <Toolbar
+            sx={{
+              pr: "24px", // keep right padding when drawer closed
+            }}
           >
-            <MenuIcon />
-          </IconButton>
-          
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            Sistema de Gestão de Documentos
-          </Typography>
-
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <Tooltip title="Notificações">
-              <IconButton color="inherit">
-                <Badge badgeContent={3} color="error">
-                  <Notifications />
-                </Badge>
-              </IconButton>
-            </Tooltip>
-
-            {user && (
-              <Chip
-                label={user.role}
-                color={getRoleColor(user.role)}
-                size="small"
-                sx={{ color: "white" }}
-              />
-            )}
-
-            <Tooltip title="Conta">
+            <IconButton
+              edge="start"
+              color="inherit"
+              aria-label="open drawer"
+              onClick={toggleDrawer}
+              sx={{
+                marginRight: "36px",
+                ...(open && { display: "none" }),
+              }}
+            >
+              <MenuIcon />
+            </IconButton>
+            <Typography
+              component="h1"
+              variant="h6"
+              color="inherit"
+              noWrap
+              sx={{ flexGrow: 1 }}
+            >
+              {getPageTitle(location.pathname)}
+            </Typography>
+            <IconButton color="inherit">
+              <Badge badgeContent={4} color="secondary">
+                <Notifications />
+              </Badge>
+            </IconButton>
+            <div>
               <IconButton
-                onClick={handleProfileMenuOpen}
-                size="small"
-                sx={{ ml: 1 }}
-                aria-controls={anchorEl ? "account-menu" : undefined}
+                size="large"
+                aria-label="account of current user"
+                aria-controls="menu-appbar"
                 aria-haspopup="true"
-                aria-expanded={anchorEl ? "true" : undefined}
+                onClick={handleMenu}
+                color="inherit"
               >
-                <Avatar sx={{ width: 32, height: 32 }}>
-                  {user?.displayName?.charAt(0).toUpperCase() || "U"}
-                </Avatar>
+                <AccountCircle />
               </IconButton>
-            </Tooltip>
-          </Box>
-        </Toolbar>
-      </AppBar>
-
-      <Menu
-        anchorEl={anchorEl}
-        id="account-menu"
-        open={Boolean(anchorEl)}
-        onClose={handleProfileMenuClose}
-        onClick={handleProfileMenuClose}
-        PaperProps={{
-          elevation: 0,
-          sx: {
-            overflow: "visible",
-            filter: "drop-shadow(0px 2px 8px rgba(0,0,0,0.32))",
-            mt: 1.5,
-            "& .MuiAvatar-root": {
-              width: 32,
-              height: 32,
-              ml: -0.5,
-              mr: 1,
-            },
-            "&:before": {
-              content: '""',
-              display: "block",
-              position: "absolute",
-              top: 0,
-              right: 14,
-              width: 10,
-              height: 10,
-              bgcolor: "background.paper",
-              transform: "translateY(-50%) rotate(45deg)",
-              zIndex: 0,
-            },
-          },
-        }}
-        transformOrigin={{ horizontal: "right", vertical: "top" }}
-        anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
-      >
-        <MenuItem>
-          <Avatar /> {user?.displayName}
-        </MenuItem>
-        <MenuItem>
-          <Typography variant="caption" color="text.secondary">
-            {user?.email}
-          </Typography>
-        </MenuItem>
-        <Divider />
-        <MenuItem onClick={() => navigate("/profile")}>
-          <ListItemIcon>
-            <AccountCircle fontSize="small" />
-          </ListItemIcon>
-          Meu Perfil
-        </MenuItem>
-        <MenuItem onClick={handleLogout}>
-          <ListItemIcon>
-            <Logout fontSize="small" />
-          </ListItemIcon>
-          Logout
-        </MenuItem>
-      </Menu>
-
-      <Box
-        component="nav"
-        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
-        aria-label="mailbox folders"
-      >
-        <Drawer
-          variant="temporary"
-          open={mobileOpen}
-          onClose={handleDrawerToggle}
-          ModalProps={{
-            keepMounted: true,
-          }}
+              <Menu
+                id="menu-appbar"
+                anchorEl={anchorEl}
+                anchorOrigin={{
+                  vertical: "top",
+                  horizontal: "right",
+                }}
+                keepMounted
+                transformOrigin={{
+                  vertical: "top",
+                  horizontal: "right",
+                }}
+                open={Boolean(anchorEl)}
+                onClose={handleClose}
+              >
+                <MenuItem onClick={handleProfile}>Perfil</MenuItem>
+                <MenuItem onClick={handleLogout}>Sair</MenuItem>
+              </Menu>
+            </div>
+          </Toolbar>
+        </AppBar>
+        <Drawer variant="permanent" open={open}>
+          <Toolbar
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-end",
+              px: [1],
+            }}
+          >
+            <IconButton onClick={toggleDrawer}>
+              <ChevronLeftIcon />
+            </IconButton>
+          </Toolbar>
+          <Divider />
+          <List component="nav">
+            <MainListItems />
+          </List>
+        </Drawer>
+        <Box
+          component="main"
           sx={{
-            display: { xs: "block", sm: "none" },
-            "& .MuiDrawer-paper": {
-              boxSizing: "border-box",
-              width: drawerWidth,
-            },
+            backgroundColor: (theme) =>
+              theme.palette.mode === "light"
+                ? theme.palette.grey[100]
+                : theme.palette.grey[900],
+            flexGrow: 1,
+            height: "100vh",
+            overflow: "auto",
           }}
         >
-          {drawer}
-        </Drawer>
-        <Drawer
-          variant="permanent"
-          sx={{
-            display: { xs: "none", sm: "block" },
-            "& .MuiDrawer-paper": {
-              boxSizing: "border-box",
-              width: drawerWidth,
-            },
-          }}
-          open
-        >
-          {drawer}
-        </Drawer>
+          <Toolbar />
+          <Box sx={{ p: 4 }}>{children}</Box>
+        </Box>
       </Box>
-
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          p: 3,
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
-          mt: 8,
-          minHeight: "calc(100vh - 64px)",
-          backgroundColor: theme.palette.background.default,
-        }}
-      >
-        {children}
-      </Box>
-    </Box>
+    </ThemeProvider>
   );
 };
 

@@ -52,7 +52,7 @@ Frontend do sistema de gestão de documentos corporativos desenvolvido com React
    - URL de produção quando disponível
 3. Configure as permissões necessárias:
    - User.Read
-   - api://securedocmanager-api/access_as_user
+   - api://securedocmanager-api/Documents.Read
 
 ## 🏃‍♂️ Executando o Projeto
 

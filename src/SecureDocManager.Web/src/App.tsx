@@ -1,4 +1,3 @@
-
 import { MsalProvider } from "@azure/msal-react";
 import { PublicClientApplication, EventType } from "@azure/msal-browser";
 import type { EventMessage, AuthenticationResult } from "@azure/msal-browser";
@@ -6,7 +5,7 @@ import { BrowserRouter as Router } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { msalConfig } from "./config/authConfig";
 import AuthWrapper from "./components/AuthWrapper";
-import { AuthProvider } from "./contexts/AuthContext";
+import { AuthProvider } from "./contexts/AuthProvider";
 import MainLayout from "./components/layout/MainLayout";
 import AppRoutes from "./routes/AppRoutes";
 
@@ -32,8 +31,8 @@ function App() {
   return (
     <MsalProvider instance={msalInstance}>
       <Router>
-        <AuthWrapper>
-          <AuthProvider>
+        <AuthProvider>
+          <AuthWrapper>
             <MainLayout>
               <AppRoutes />
             </MainLayout>
@@ -61,8 +60,8 @@ function App() {
                 },
               }}
             />
-          </AuthProvider>
-        </AuthWrapper>
+          </AuthWrapper>
+        </AuthProvider>
       </Router>
     </MsalProvider>
   );

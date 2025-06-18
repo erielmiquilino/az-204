@@ -494,7 +494,7 @@ export const msalConfig = {
 };
 
 export const loginRequest = {
-    scopes: ["api://securedocmanager-api/access_as_user", "User.Read"]
+    scopes: ["api://securedocmanager-api/Documents.Read"]
 };
 ```
 
@@ -532,7 +532,7 @@ export const useApiCall = () => {
     
     const callApi = async (url, options = {}) => {
         const request = {
-            scopes: ["api://securedocmanager-api/access_as_user"],
+            scopes: ["api://securedocmanager-api/Documents.Read"],
             account: accounts[0]
         };
         
@@ -557,10 +557,10 @@ export const useApiCall = () => {
 
 #### 5.1 Configuração no App Service
 
-```bash
+```PowerShell
 # Habilitar System Assigned Managed Identity
-az webapp identity assign \
-    --name app-securedocmanager \
+az webapp identity assign `
+    --name app-securedocmanager `
     --resource-group $RG_NAME
 
 # Dar permissões ao Key Vault

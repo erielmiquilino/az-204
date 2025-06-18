@@ -1,6 +1,8 @@
 import React from "react";
 import { useMsal } from "@azure/msal-react";
 import { loginRequest } from "../config/authConfig";
+import { useAuth } from "../contexts/useAuth";
+import { Navigate } from "react-router-dom";
 import { 
   Box, 
   Button, 
@@ -45,6 +47,11 @@ interface AuthWrapperProps {
 
 const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
   const { instance, accounts, inProgress } = useMsal();
+  const [isAuthenticated, setIsAuthenticated] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsAuthenticated(accounts.length > 0);
+  }, [accounts]);
 
   const handleLogin = () => {
     instance.loginPopup(loginRequest).catch((error) => {
@@ -77,7 +84,7 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
   }
 
   // Not authenticated
-  if (accounts.length === 0) {
+  if (!isAuthenticated) {
     return (
       <ThemeProvider theme={theme}>
         <CssBaseline />
@@ -138,7 +145,18 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
     );
   }
 
-  // Authenticated - render children
+  // Authenticated - render children with auth check
+  return <AuthenticatedWrapper>{children}</AuthenticatedWrapper>;
+};
+
+// Componente separado para quando já está autenticado
+const AuthenticatedWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { error } = useAuth();
+
+  if (error) {
+    return <Navigate to="/auth-error" />;
+  }
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />

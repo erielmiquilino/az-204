@@ -6,17 +6,17 @@ namespace SecureDocManager.API.Services
 {
     public class KeyVaultService : IKeyVaultService
     {
-        private readonly SecretClient _secretClient;
+        private readonly SecretClient? _secretClient;
         private readonly CertificateClient? _certificateClient;
         private readonly IConfiguration _configuration;
         private readonly ILogger<KeyVaultService> _logger;
 
         public KeyVaultService(
-            SecretClient secretClient, 
+            SecretClient? secretClient,
             IConfiguration configuration,
             ILogger<KeyVaultService> logger)
         {
-            _secretClient = secretClient;
+            _secretClient = secretClient!;
             _configuration = configuration;
             _logger = logger;
             
@@ -29,6 +29,12 @@ namespace SecureDocManager.API.Services
 
         public async Task<string> GetSecretAsync(string secretName)
         {
+            if (_secretClient == null)
+            {
+                _logger.LogWarning("SecretClient não configurado. Usando valor local para {SecretName}", secretName);
+                return _configuration[secretName]!;
+            }
+
             try
             {
                 var secret = await _secretClient.GetSecretAsync(secretName);

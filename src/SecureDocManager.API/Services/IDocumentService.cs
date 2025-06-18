@@ -11,5 +11,8 @@ namespace SecureDocManager.API.Services
         Task<Document?> GetDocumentByIdAsync(int documentId);
         Task<IEnumerable<Document>> GetDocumentsByDepartmentAsync(string departmentId, string userRole);
         Task<byte[]> SignDocumentAsync(byte[] document, string certificateName);
+        Task<string> GetUserRoleAsync(string userId);
+        Task<byte[]> DownloadDocumentAsync(int documentId);
+        Task<IEnumerable<Document>> GetAllDocumentsAsync(string userRole);
     }
 }

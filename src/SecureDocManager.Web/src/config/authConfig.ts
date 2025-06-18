@@ -38,9 +38,19 @@ export const msalConfig: Configuration = {
   },
 };
 
+const apiScope = import.meta.env.VITE_API_SCOPE_URI;
+
+if (!apiScope) {
+  // Isso garante que o app não vai rodar sem a configuração correta
+  throw new Error(
+    "VITE_API_SCOPE_URI is not defined in your environment variables. Please check your .env file."
+  );
+}
+
 // Add here scopes for id token to be used at MS Identity Platform endpoints.
 export const loginRequest: PopupRequest = {
-  scopes: ["api://securedocmanager-api/access_as_user", "User.Read"],
+  scopes: [apiScope, "User.Read"],
+  prompt: "consent",
 };
 
 // Add here the endpoints for MS Graph API services you would like to use.

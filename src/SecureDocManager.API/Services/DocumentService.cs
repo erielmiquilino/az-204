@@ -230,6 +230,20 @@ namespace SecureDocManager.API.Services
                 .ToListAsync();
         }
 
+        public async Task<IEnumerable<Document>> GetAllDocumentsAsync(string userRole)
+        {
+            var query = _context.Documents
+                .Where(d => !d.IsDeleted);
+
+            // Filtrar por nível de acesso baseado no role
+            var accessLevel = GetAccessLevel(userRole);
+            query = query.Where(d => d.AccessLevel <= accessLevel);
+
+            return await query
+                .OrderByDescending(d => d.UploadedAt)
+                .ToListAsync();
+        }
+
         public async Task<byte[]> SignDocumentAsync(byte[] document, string certificateName)
         {
             try
@@ -260,6 +274,51 @@ namespace SecureDocManager.API.Services
                 "Employee" => 1,
                 _ => 0
             };
+        }
+
+        public async Task<string> GetUserRoleAsync(string userId)
+        {
+            // Em produção, isso viria do Microsoft Graph ou do banco de dados
+            // Por enquanto, vamos simular baseado no ID do usuário
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            
+            if (user != null)
+            {
+                return user.Role;
+            }
+
+            // Retornar Employee como padrão
+            return "Employee";
+        }
+
+        public async Task<byte[]> DownloadDocumentAsync(int documentId)
+        {
+            try
+            {
+                var document = await GetDocumentByIdAsync(documentId);
+                if (document == null)
+                {
+                    throw new FileNotFoundException("Documento não encontrado");
+                }
+
+                var containerClient = await GetContainerClientAsync();
+                var blobName = new Uri(document.BlobStorageUrl).Segments.Last();
+                var blobClient = containerClient.GetBlobClient(blobName);
+
+                if (!await blobClient.ExistsAsync())
+                {
+                    throw new FileNotFoundException("Arquivo não encontrado no storage");
+                }
+
+                // Download do conteúdo do blob
+                var response = await blobClient.DownloadContentAsync();
+                return response.Value.Content.ToArray();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao fazer download do documento {DocumentId}", documentId);
+                throw;
+            }
         }
     }
 }

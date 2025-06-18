@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Identity.Web;
 using SecureDocManager.API.Data;
+using SecureDocManager.API.Models;
 using SecureDocManager.API.Services;
 
 namespace SecureDocManager.API.Controllers

@@ -1,7 +1,7 @@
 import React, { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { CircularProgress, Box } from "@mui/material";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "../contexts/useAuth";
 import { UserRole } from "../types";
 
 // Lazy load pages
@@ -13,6 +13,7 @@ const Audit = lazy(() => import("../pages/Audit"));
 const Settings = lazy(() => import("../pages/Settings"));
 const Profile = lazy(() => import("../pages/Profile"));
 const NotFound = lazy(() => import("../pages/NotFound"));
+const AuthError = lazy(() => import("../pages/AuthError"));
 
 // Loading component
 const PageLoader = () => (
@@ -130,6 +131,9 @@ const AppRoutes: React.FC = () => {
             </Box>
           }
         />
+        
+        {/* Auth error route */}
+        <Route path="/auth-error" element={<AuthError />} />
         
         {/* 404 route */}
         <Route path="*" element={<NotFound />} />

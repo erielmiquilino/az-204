@@ -1,28 +1,11 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useMsal } from "@azure/msal-react";
 import { InteractionStatus } from "@azure/msal-browser";
-import { graphConfig, loginRequest } from "../config/authConfig";
+import { graphConfig } from "../config/authConfig";
 import type { User } from "../types";
 import { UserRole } from "../types";
 import { useApiCall } from "../hooks/useApiCall";
-
-interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  error: string | null;
-  refreshUser: () => Promise<void>;
-  logout: () => void;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
-};
+import { AuthContext } from "./useAuth";
 
 interface AuthProviderProps {
   children: React.ReactNode;
@@ -34,25 +17,46 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const maxRetries = 3;
+  const isRetryingRef = useRef(false);
 
-  const fetchUserProfile = async () => {
+  const fetchUserProfile = useCallback(async () => {
     if (accounts.length === 0) {
       setUser(null);
       setLoading(false);
       return;
     }
 
+    // Previne múltiplas tentativas simultâneas
+    if (isRetryingRef.current) {
+      return;
+    }
+
+    // Se já tentou o máximo de vezes, para
+    if (retryCount >= maxRetries) {
+      console.error("Máximo de tentativas excedido. Parando de tentar buscar o perfil.");
+      setError("Não foi possível carregar o perfil do usuário após múltiplas tentativas.");
+      setLoading(false);
+      return;
+    }
+
     try {
+      isRetryingRef.current = true;
       setLoading(true);
       setError(null);
 
-      // Get user profile from Microsoft Graph
-      const request = {
-        ...loginRequest,
+      // Requisição específica para o Microsoft Graph com apenas o scope User.Read
+      const graphRequest = {
+        scopes: ["User.Read"],
         account: accounts[0],
       };
 
-      const tokenResponse = await instance.acquireTokenSilent(request);
+      console.log("Adquirindo token para Microsoft Graph...");
+      const tokenResponse = await instance.acquireTokenSilent(graphRequest);
+      
+      console.log("Token acquired successfully");
+      console.log("Calling Graph API:", graphConfig.graphMeEndpoint);
       
       const graphResponse = await fetch(graphConfig.graphMeEndpoint, {
         headers: {
@@ -60,13 +64,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         },
       });
 
+      console.log("Graph API response status:", graphResponse.status);
+      console.log("Graph API response statusText:", graphResponse.statusText);
+
       if (!graphResponse.ok) {
-        throw new Error("Failed to fetch user profile from Graph");
+        const errorText = await graphResponse.text();
+        console.error("Graph API error response:", errorText);
+        throw new Error(`Failed to fetch user profile from Graph: ${graphResponse.status} ${graphResponse.statusText}`);
       }
 
       const graphData = await graphResponse.json();
 
-      // Get additional user data from our API (including role)
+      // Agora busca dados da nossa API usando o token correto
       const apiResponse = await callApi<User>(`/users/profile`, {
         showError: false,
       });
@@ -80,22 +89,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           jobTitle: graphData.jobTitle || apiResponse.data.jobTitle,
         });
       } else {
-        // If API call fails, create user from Graph data with default role
         setUser({
           id: graphData.id,
           displayName: graphData.displayName || "User",
           email: graphData.mail || graphData.userPrincipalName || "",
           department: graphData.department,
           jobTitle: graphData.jobTitle,
-          role: UserRole.Employee, // Default role
+          role: UserRole.Employee,
         });
       }
+
+      // Reset retry count on success
+      setRetryCount(0);
     } catch (err) {
       console.error("Error fetching user profile:", err);
-      setError(err instanceof Error ? err.message : "Failed to fetch user profile");
+      const errorMessage = err instanceof Error ? err.message : "Failed to fetch user profile";
+      setError(errorMessage);
       
-      // Set basic user info even if full profile fetch fails
-      if (accounts.length > 0) {
+      // Incrementa o contador de tentativas
+      setRetryCount(prev => prev + 1);
+      
+      // Se ainda não atingiu o máximo e é um erro de autenticação, tenta novamente após um delay
+      if (retryCount < maxRetries - 1 && errorMessage.includes("Invalid")) {
+        console.log(`Tentativa ${retryCount + 1} de ${maxRetries} falhou. Tentando novamente em 2 segundos...`);
+        setTimeout(() => {
+          isRetryingRef.current = false;
+          fetchUserProfile();
+        }, 2000);
+      } else if (accounts.length > 0) {
+        // Fallback com dados básicos
         setUser({
           id: accounts[0].localAccountId,
           displayName: accounts[0].name || "User",
@@ -105,17 +127,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     } finally {
       setLoading(false);
+      isRetryingRef.current = false;
     }
-  };
+  }, [accounts, callApi, instance, retryCount]);
 
   const refreshUser = async () => {
+    setRetryCount(0); // Reset retry count when manually refreshing
     await fetchUserProfile();
   };
 
   const logout = () => {
     instance.logoutPopup().catch((error) => {
       console.error("Logout failed:", error);
-      // Fallback to redirect
       instance.logoutRedirect();
     });
   };
@@ -124,7 +147,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (inProgress === InteractionStatus.None) {
       fetchUserProfile();
     }
-  }, [accounts, inProgress]);
+  }, [inProgress]); // Removido fetchUserProfile das dependências para evitar loops
 
   return (
     <AuthContext.Provider
