@@ -10,7 +10,7 @@
     <!-- Authentication & Authorization -->
     <PackageReference Include="Microsoft.Identity.Web" Version="3.9.4" />
     <PackageReference Include="Microsoft.Identity.Web.MicrosoftGraph" Version="3.9.4" />
-    <PackageReference Include="Microsoft.Graph" Version="5.81.0" />
+    <PackageReference Include="Microsoft.Graph" Version="5.82.0" />
     
     <!-- Azure Services -->
     <PackageReference Include="Azure.Identity" Version="1.14.0" />

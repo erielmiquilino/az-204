@@ -90,6 +90,65 @@ namespace SecureDocManager.API.Controllers
             }
         }
 
+        [HttpGet("profile")]
+        public async Task<IActionResult> GetProfile()
+        {
+            try
+            {
+                var userId = User.GetObjectId();
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new { error = "User ID not found in token" });
+                }
+
+                // Primeiro tentar buscar do banco local
+                var user = await _context.Users.FindAsync(userId);
+                
+                if (user == null)
+                {
+                    // Se não existir, criar um novo usuário com dados básicos do token
+                    user = new User
+                    {
+                        Id = userId,
+                        DisplayName = User.Identity?.Name ?? "Unknown User",
+                        Email = User.FindFirst("preferred_username")?.Value ?? 
+                                User.FindFirst("email")?.Value ?? 
+                                User.FindFirst("upn")?.Value ?? "",
+                        Department = User.FindFirst("department")?.Value ?? "N/A",
+                        JobTitle = User.FindFirst("jobTitle")?.Value ?? "N/A",
+                        Role = "Employee", // Role padrão
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow,
+                        LastLoginAt = DateTime.UtcNow
+                    };
+
+                    _context.Users.Add(user);
+                    await _context.SaveChangesAsync();
+                }
+                else
+                {
+                    // Atualizar último login
+                    user.LastLoginAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+
+                return Ok(new
+                {
+                    user.Id,
+                    user.DisplayName,
+                    user.Email,
+                    user.Department,
+                    user.JobTitle,
+                    user.Role
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao obter perfil do usuário");
+                return StatusCode(500, new { error = "Erro ao processar requisição", details = ex.Message });
+            }
+        }
+
         [HttpGet("{id}")]
         public async Task<IActionResult> GetUser(string id)
         {

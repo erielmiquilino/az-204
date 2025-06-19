@@ -7,7 +7,8 @@ Este erro ocorre quando a aplicação não consegue buscar o perfil do usuário 
 ### Erro Específico: "Invalid audience"
 
 Se você vê o erro:
-```
+
+```text
 Access token validation failure. Invalid audience.
 ```
 
@@ -16,12 +17,13 @@ Isso significa que o token foi emitido para o audience errado. O Microsoft Graph
 #### Solução Implementada
 
 O código foi atualizado para:
+
 1. Requisitar um token específico para o Microsoft Graph com o scope `User.Read`
 2. Implementar tratamento de erro com limite de tentativas (máximo 3)
 3. Redirecionar para uma página de erro após falhas repetidas
 4. Prevenir loops infinitos de erro
 
-### Causas Comuns e Soluções:
+### Causas Comuns e Soluções
 
 #### 1. Arquivo .env não configurado
 
@@ -71,11 +73,11 @@ Execute os seguintes passos:
 Com as alterações feitas no `AuthProvider.tsx`, você verá no console:
 
 - "Token acquired successfully" - se o token foi obtido
-- "Calling Graph API: https://graph.microsoft.com/v1.0/me" - endpoint sendo chamado
+- "Calling Graph API: <https://graph.microsoft.com/v1.0/me>" - endpoint sendo chamado
 - "Graph API response status: XXX" - código de status HTTP
 - Detalhes do erro se houver falha
 
-### Códigos de Erro Comuns:
+### Códigos de Erro Comuns
 
 - **401 Unauthorized**: Token inválido ou sem permissões
 - **403 Forbidden**: Aplicação não tem permissão para acessar o recurso
@@ -94,4 +96,4 @@ $tenantId = "seu-tenant-id"
 Start-Process "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/authorize?client_id=$clientId&response_type=code&redirect_uri=http://localhost:5173&scope=openid%20profile%20User.Read"
 ```
 
-Se o login funcionar, mas o erro persistir, o problema está nas permissões ou configuração da aplicação. 
+Se o login funcionar, mas o erro persistir, o problema está nas permissões ou configuração da aplicação.

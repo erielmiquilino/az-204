@@ -104,16 +104,8 @@ builder.Services.AddAzureClients(clientBuilder =>
 });
 
 // Configurar Authentication com Microsoft Entra ID
-// A linha abaixo é redundante e causa o erro "Scheme already exists: Bearer"
-// builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-//     .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
-
-// Configurar Microsoft Graph
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddMicrosoftIdentityWebApi(builder.Configuration, "AzureAd")
-    .EnableTokenAcquisitionToCallDownstreamApi()
-    .AddMicrosoftGraph(builder.Configuration.GetSection("MicrosoftGraph"))
-    .AddInMemoryTokenCaches();
+    .AddMicrosoftIdentityWebApi(builder.Configuration, "AzureAd");
 
 // Configurar Authorization com políticas baseadas em roles
 builder.Services.AddAuthorization(options =>
@@ -164,10 +156,14 @@ builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddScoped<IKeyVaultService, KeyVaultService>();
 builder.Services.AddScoped<IDocumentService, DocumentService>();
-builder.Services.AddScoped<IGraphService, GraphService>();
+// Temporariamente comentado até resolver o problema do Microsoft Graph
+// builder.Services.AddScoped<IGraphService, GraphService>();
 builder.Services.AddScoped<ICosmosService, CosmosService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IDocumentSigningService, DocumentSigningService>();
+
+// Registrar um mock temporário do GraphService
+builder.Services.AddScoped<IGraphService>(provider => new MockGraphService());
 
 // Configurar CORS
 builder.Services.AddCors(options =>
