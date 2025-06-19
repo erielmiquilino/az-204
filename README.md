@@ -13,6 +13,30 @@ O **SecureDocManager** é uma aplicação web completa que demonstra a implement
 - **Portfólio técnico**: Demonstrar competência em desenvolvimento com Azure
 - **Integração de tecnologias**: Ver como diferentes serviços do Azure trabalham juntos
 
+### ⚠️ Importante: Uso de IA no Desenvolvimento
+
+Este projeto foi desenvolvido com **assistência massiva de Inteligência Artificial** (Claude Sonnet/opus e Gemini Pro). O objetivo principal é **didático e educacional**, focando especificamente no aprendizado das integrações com serviços Azure.
+
+**Características do projeto:**
+
+- 🤖 **Geração de código por IA**: Aproximadamente 80-90% do código foi gerado com assistência de IA
+- 📚 **Foco didático**: Prioriza clareza e compreensão sobre otimização extrema
+- 🎯 **Objetivo educacional**: Demonstrar integrações Azure de forma prática e funcional
+- 🔧 **Código funcional**: Totalmente operacional, mas não necessariamente production-ready
+
+**O que este projeto NÃO é:**
+
+- ❌ Exemplo de código enterprise otimizado
+- ❌ Referência de melhores práticas de arquitetura
+- ❌ Solução pronta para produção sem revisões
+
+**O que este projeto É:**
+
+- ✅ Ambiente de aprendizado prático para Azure AZ-204
+- ✅ Demonstração funcional de integrações Azure
+- ✅ Base para experimentação e estudo
+- ✅ Exemplo de como IA pode acelerar o desenvolvimento para fins educacionais
+
 ## 🚀 Funcionalidades
 
 ### Para Usuários
@@ -222,6 +246,6 @@ Este projeto é open source e está disponível sob a licença MIT.
 
 ---
 
-**Desenvolvido por:** [Seu Nome]  
+**Desenvolvido por:** Eriel Miquilino com muito Vibe Coding
 **Objetivo:** Preparação para certificação Microsoft Azure AZ-204  
 **Status:** ✅ Completo e funcional
