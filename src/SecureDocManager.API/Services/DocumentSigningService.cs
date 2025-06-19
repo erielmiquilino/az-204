@@ -1,157 +1,223 @@
 using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
-using Azure.Identity;
-using Azure.Security.KeyVault.Certificates;
-using Azure.Security.KeyVault.Keys;
-using Azure.Security.KeyVault.Keys.Cryptography;
+using Azure.Storage.Blobs;
+using SecureDocManager.API.Models;
 
 namespace SecureDocManager.API.Services
 {
     public class DocumentSigningService : IDocumentSigningService
     {
         private readonly IKeyVaultService _keyVaultService;
-        private readonly IAuditService _auditService;
+        private readonly ICosmosService _cosmosService;
         private readonly IDocumentService _documentService;
-        private readonly IConfiguration _configuration;
+        private readonly IAuditService _auditService;
+        private readonly BlobServiceClient _blobServiceClient;
         private readonly ILogger<DocumentSigningService> _logger;
-        private readonly KeyClient? _keyClient;
 
         public DocumentSigningService(
             IKeyVaultService keyVaultService,
-            IAuditService auditService,
+            ICosmosService cosmosService,
             IDocumentService documentService,
-            IConfiguration configuration,
+            IAuditService auditService,
+            BlobServiceClient blobServiceClient,
             ILogger<DocumentSigningService> logger)
         {
             _keyVaultService = keyVaultService;
-            _auditService = auditService;
+            _cosmosService = cosmosService;
             _documentService = documentService;
-            _configuration = configuration;
+            _auditService = auditService;
+            _blobServiceClient = blobServiceClient;
             _logger = logger;
-
-            var keyVaultUrl = configuration["KeyVault:Url"];
-            if (!string.IsNullOrEmpty(keyVaultUrl))
-            {
-                _keyClient = new KeyClient(new Uri(keyVaultUrl), new DefaultAzureCredential());
-            }
         }
 
-        public async Task<byte[]> SignDocumentAsync(byte[] document, string certificateName)
+        public async Task<bool> EnsureUserCertificateAsync(string userId, string userEmail, string userName)
         {
             try
             {
-                if (_keyClient == null)
+                // Verificar se o certificado já existe
+                if (await _keyVaultService.UserCertificateExistsAsync(userId))
                 {
-                    throw new InvalidOperationException("Key client não está configurado");
+                    _logger.LogInformation("Certificado já existe para o usuário {UserId}", userId);
+                    return true;
                 }
 
-                // Obter a chave do certificado no Key Vault
-                var keyVaultKey = await _keyClient.GetKeyAsync(certificateName);
-                var cryptoClient = new CryptographyClient(keyVaultKey.Value.Id, new DefaultAzureCredential());
-
-                // Calcular hash do documento
-                using var sha256 = SHA256.Create();
-                var documentHash = sha256.ComputeHash(document);
-
-                // Assinar o hash usando a chave do Key Vault
-                var signResult = await cryptoClient.SignAsync(SignatureAlgorithm.RS256, documentHash);
-
-                _logger.LogInformation("Documento assinado com sucesso usando certificado {CertificateName}", certificateName);
-
-                return signResult.Signature;
+                // Criar novo certificado
+                _logger.LogInformation("Criando novo certificado para o usuário {UserId}", userId);
+                return await _keyVaultService.CreateUserCertificateAsync(userId, userEmail, userName);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Erro ao assinar documento com certificado {CertificateName}", certificateName);
+                _logger.LogError(ex, "Erro ao garantir certificado para o usuário {UserId}", userId);
                 throw;
             }
         }
 
-        public async Task<bool> VerifySignatureAsync(byte[] document, byte[] signature, string certificateName)
+        public async Task<DocumentSignature> SignDocumentAsync(int documentId, string userId, string userEmail, string userName)
         {
             try
             {
-                var certificateBytes = await _keyVaultService.GetCertificateAsync(certificateName);
-                using var certificate = X509CertificateLoader.LoadCertificate(certificateBytes);
-                
-                using var rsa = certificate.GetRSAPublicKey();
-                if (rsa == null)
+                // Garantir que o usuário tem um certificado
+                var certificateReady = await EnsureUserCertificateAsync(userId, userEmail, userName);
+                if (!certificateReady)
                 {
-                    throw new InvalidOperationException("Não foi possível obter a chave pública do certificado");
+                    _logger.LogError("Não foi possível criar ou verificar o certificado do usuário {UserId}. Verifique as permissões no Key Vault.", userId);
+                    throw new InvalidOperationException("Não foi possível criar ou verificar o certificado do usuário. Verifique as permissões no Key Vault.");
                 }
 
-                using var sha256 = SHA256.Create();
-                var documentHash = sha256.ComputeHash(document);
-
-                return rsa.VerifyData(documentHash, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erro ao verificar assinatura do documento");
-                return false;
-            }
-        }
-
-        public async Task<string> CreateSignedDocumentUrlAsync(int documentId, string userId)
-        {
-            try
-            {
-                // Obter o documento
+                // Buscar o documento
                 var document = await _documentService.GetDocumentByIdAsync(documentId);
                 if (document == null)
                 {
                     throw new ArgumentException($"Documento {documentId} não encontrado");
                 }
 
-                // Verificar permissões (apenas Admin e Manager podem assinar)
-                var userRole = await _documentService.GetUserRoleAsync(userId);
-                if (userRole != "Admin" && userRole != "Manager")
+                // Baixar o arquivo do blob storage
+                var containerClient = _blobServiceClient.GetBlobContainerClient("documents");
+                
+                var blobUri = new Uri(document.BlobStorageUrl);
+                var pathAndQuery = blobUri.PathAndQuery;
+                var blobName = pathAndQuery.Substring(pathAndQuery.IndexOf('/', 1) + 1);
+
+                if (string.IsNullOrEmpty(blobName) || blobName == "/")
                 {
-                    throw new UnauthorizedAccessException("Usuário não tem permissão para assinar documentos");
+                    _logger.LogError("Nome do blob inválido ou não encontrado na URL: {BlobUrl}", document.BlobStorageUrl);
+                    throw new InvalidOperationException($"Nome do blob inválido ou não encontrado na URL: {document.BlobStorageUrl}");
                 }
+                
+                var blobClient = containerClient.GetBlobClient(blobName);
+                
+                using var memoryStream = new MemoryStream();
+                await blobClient.DownloadToAsync(memoryStream);
+                var documentBytes = memoryStream.ToArray();
 
-                // Baixar o conteúdo do documento
-                var documentContent = await _documentService.DownloadDocumentAsync(documentId);
+                // Calcular hash do documento
+                using var sha256 = SHA256.Create();
+                var documentHash = sha256.ComputeHash(documentBytes);
 
-                // Assinar o documento
-                var signature = await SignDocumentAsync(documentContent, "document-signing-cert");
+                // Assinar o hash com o certificado do usuário
+                var signature = await _keyVaultService.SignDataAsync(documentHash, userId);
 
-                // Salvar a assinatura (em produção, isso seria salvo no banco de dados)
-                // Por enquanto, vamos apenas registrar no audit log
-                await _auditService.LogAccessAsync(
-                    userId,
-                    "Sistema",
+                // Obter informações do certificado
+                var certificateInfo = await _keyVaultService.GetUserCertificateInfoAsync(userId);
+
+                // Criar registro de assinatura
+                var documentSignature = new DocumentSignature
+                {
+                    DocumentId = documentId,
+                    SignedBy = userId,
+                    SignedByName = userName,
+                    SignedByEmail = userEmail,
+                    SignedAt = DateTime.UtcNow,
+                    SignatureData = Convert.ToBase64String(signature),
+                    DocumentHash = Convert.ToBase64String(documentHash),
+                    CertificateThumbprint = certificateInfo.Thumbprint,
+                    IsValid = true
+                };
+
+                // Salvar assinatura no Cosmos DB
+                var savedSignature = await _cosmosService.SaveSignatureAsync(documentSignature);
+
+                // Atualizar o documento para marcar como assinado
+                document.IsDigitallySigned = true;
+                await _documentService.UpdateDocumentAsync(document);
+
+                // Registrar no log de auditoria
+                await _auditService.LogDocumentActionAsync(
                     documentId,
-                    "DocumentSigned",
+                    userId,
+                    "Sign",
                     null,
-                    $"Documento assinado digitalmente. Thumbprint: {Convert.ToBase64String(signature).Substring(0, 20)}..."
+                    $"Documento assinado digitalmente. ID da assinatura: {savedSignature.Id}"
                 );
 
-                // Gerar URL temporária para download
-                return await _documentService.GenerateDownloadUrlAsync(documentId.ToString(), userRole);
+                _logger.LogInformation("Documento {DocumentId} assinado com sucesso pelo usuário {UserId}", 
+                    documentId, userId);
+
+                return savedSignature;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Erro ao criar URL de documento assinado para documento {DocumentId}", documentId);
+                _logger.LogError(ex, "Erro ao assinar documento {DocumentId} pelo usuário {UserId}", 
+                    documentId, userId);
                 throw;
             }
         }
 
-        public async Task<DocumentSignature> GetDocumentSignatureAsync(int documentId)
+        public async Task<bool> VerifySignatureAsync(int documentId, string signatureId)
         {
-            // Em produção, isso viria do banco de dados
-            // Por enquanto, vamos simular
-            await Task.Delay(100); // Simular operação assíncrona
-
-            return new DocumentSignature
+            try
             {
-                DocumentId = documentId,
-                Signature = Array.Empty<byte>(),
-                SignedBy = "Sistema",
-                SignedAt = DateTime.UtcNow,
-                CertificateThumbprint = "SIMULADO",
-                IsValid = false
-            };
+                // Buscar a assinatura
+                var signature = await _cosmosService.GetSignatureAsync(signatureId);
+                if (signature == null || signature.DocumentId != documentId)
+                {
+                    _logger.LogWarning("Assinatura {SignatureId} não encontrada para o documento {DocumentId}", 
+                        signatureId, documentId);
+                    return false;
+                }
+
+                // Buscar o documento
+                var document = await _documentService.GetDocumentByIdAsync(documentId);
+                if (document == null)
+                {
+                    return false;
+                }
+
+                // Baixar o arquivo atual
+                var containerClient = _blobServiceClient.GetBlobContainerClient("documents");
+                
+                var blobUri = new Uri(document.BlobStorageUrl);
+                var pathAndQuery = blobUri.PathAndQuery;
+                var blobName = pathAndQuery.Substring(pathAndQuery.IndexOf('/', 1) + 1);
+                
+                var blobClient = containerClient.GetBlobClient(blobName);
+                
+                using var memoryStream = new MemoryStream();
+                await blobClient.DownloadToAsync(memoryStream);
+                var documentBytes = memoryStream.ToArray();
+
+                // Calcular hash atual do documento
+                using var sha256 = SHA256.Create();
+                var currentHash = sha256.ComputeHash(documentBytes);
+
+                // Comparar com o hash armazenado
+                var storedHash = Convert.FromBase64String(signature.DocumentHash);
+                if (!currentHash.SequenceEqual(storedHash))
+                {
+                    _logger.LogWarning("Hash do documento {DocumentId} não corresponde ao hash assinado", documentId);
+                    return false;
+                }
+
+                // Verificar a assinatura com o Key Vault
+                var signatureBytes = Convert.FromBase64String(signature.SignatureData);
+                var isValid = await _keyVaultService.VerifySignatureAsync(currentHash, signatureBytes, signature.SignedBy);
+
+                // Atualizar o status de verificação
+                signature.IsValid = isValid;
+                signature.VerifiedAt = DateTime.UtcNow;
+                
+                _logger.LogInformation("Assinatura {SignatureId} verificada: {IsValid}", signatureId, isValid);
+                return isValid;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao verificar assinatura {SignatureId}", signatureId);
+                return false;
+            }
         }
+
+        public async Task<IEnumerable<DocumentSignature>> GetDocumentSignaturesAsync(int documentId)
+        {
+            try
+            {
+                return await _cosmosService.GetDocumentSignaturesAsync(documentId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao buscar assinaturas do documento {DocumentId}", documentId);
+                throw;
+            }
+        }
+
+
     }
 } 

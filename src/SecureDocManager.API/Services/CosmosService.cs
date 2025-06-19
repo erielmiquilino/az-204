@@ -8,21 +8,28 @@ namespace SecureDocManager.API.Services
     public class CosmosService : ICosmosService
     {
         private readonly CosmosClient _cosmosClient;
-        private readonly Container _container;
+        private readonly Container _documentsContainer;
+        private readonly Container _signaturesContainer;
         private readonly ILogger<CosmosService> _logger;
 
         public CosmosService(CosmosClient cosmosClient, ILogger<CosmosService> logger)
         {
             _cosmosClient = cosmosClient;
             _logger = logger;
-            _container = _cosmosClient.GetContainer("DocumentsDB", "Documents");
+
+            // Garante que o banco de dados e os contêineres existam.
+            // Isso é útil para desenvolvimento e implantações iniciais.
+            var databaseResponse = _cosmosClient.CreateDatabaseIfNotExistsAsync("DocumentsDB").GetAwaiter().GetResult();
+            var database = databaseResponse.Database;
+            _documentsContainer = database.CreateContainerIfNotExistsAsync("Documents", "/departmentId").GetAwaiter().GetResult();
+            _signaturesContainer = database.CreateContainerIfNotExistsAsync("Signatures", "/documentId").GetAwaiter().GetResult();
         }
 
         public async Task<CosmosDocument> CreateDocumentAsync(CosmosDocument document)
         {
             try
             {
-                var response = await _container.CreateItemAsync(
+                var response = await _documentsContainer.CreateItemAsync(
                     document, 
                     new PartitionKey(document.DepartmentId));
                 
@@ -40,7 +47,7 @@ namespace SecureDocManager.API.Services
         {
             try
             {
-                var response = await _container.ReadItemAsync<CosmosDocument>(
+                var response = await _documentsContainer.ReadItemAsync<CosmosDocument>(
                     id, 
                     new PartitionKey(departmentId));
                 
@@ -69,7 +76,7 @@ namespace SecureDocManager.API.Services
                     .WithParameter("@departmentId", departmentId)
                     .WithParameter("@accessLevel", accessLevel);
                 
-                var query = _container.GetItemQueryIterator<CosmosDocument>(queryDefinition);
+                var query = _documentsContainer.GetItemQueryIterator<CosmosDocument>(queryDefinition);
                 var results = new List<CosmosDocument>();
                 
                 while (query.HasMoreResults)
@@ -96,7 +103,7 @@ namespace SecureDocManager.API.Services
         {
             try
             {
-                var response = await _container.ReplaceItemAsync(
+                var response = await _documentsContainer.ReplaceItemAsync(
                     document, 
                     document.Id, 
                     new PartitionKey(document.DepartmentId));
@@ -115,7 +122,7 @@ namespace SecureDocManager.API.Services
         {
             try
             {
-                await _container.DeleteItemAsync<CosmosDocument>(
+                await _documentsContainer.DeleteItemAsync<CosmosDocument>(
                     id, 
                     new PartitionKey(departmentId));
                 
@@ -173,7 +180,7 @@ namespace SecureDocManager.API.Services
                     .WithParameter("@accessLevel", accessLevel)
                     .WithParameter("@searchTerm", searchTerm);
                 
-                var query = _container.GetItemQueryIterator<CosmosDocument>(queryDefinition);
+                var query = _documentsContainer.GetItemQueryIterator<CosmosDocument>(queryDefinition);
                 var results = new List<CosmosDocument>();
                 
                 while (query.HasMoreResults)
@@ -200,6 +207,115 @@ namespace SecureDocManager.API.Services
                 "Employee" => 1,
                 _ => 0
             };
+        }
+        
+        // Implementação dos métodos de assinatura
+        public async Task<DocumentSignature> SaveSignatureAsync(DocumentSignature signature)
+        {
+            try
+            {
+                // Garante que o ID da assinatura seja único
+                if (string.IsNullOrEmpty(signature.Id))
+                {
+                    signature.Id = Guid.NewGuid().ToString();
+                }
+
+                var response = await _signaturesContainer.CreateItemAsync(
+                    signature, 
+                    new PartitionKey(signature.DocumentId));
+                
+                _logger.LogInformation("Assinatura salva para o documento: {DocumentId}", signature.DocumentId);
+                return response.Resource;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao salvar assinatura do documento {DocumentId}", signature.DocumentId);
+                throw;
+            }
+        }
+
+        public async Task<DocumentSignature?> GetSignatureAsync(string signatureId)
+        {
+            try
+            {
+                 var queryDefinition = new QueryDefinition(
+                    "SELECT * FROM c WHERE c.id = @signatureId")
+                    .WithParameter("@signatureId", signatureId);
+                
+                // Como não sabemos a partition key (documentId), fazemos uma cross-partition query
+                var queryOptions = new QueryRequestOptions { MaxConcurrency = -1 };
+
+                var query = _signaturesContainer.GetItemQueryIterator<DocumentSignature>(queryDefinition, requestOptions: queryOptions);
+                
+                if (query.HasMoreResults)
+                {
+                    var response = await query.ReadNextAsync();
+                    return response.FirstOrDefault();
+                }
+                
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao buscar assinatura {SignatureId}", signatureId);
+                throw;
+            }
+        }
+
+        public async Task<IEnumerable<DocumentSignature>> GetDocumentSignaturesAsync(int documentId)
+        {
+            try
+            {
+                var queryDefinition = new QueryDefinition("SELECT * FROM c ORDER BY c.signedAt DESC");
+                
+                var queryOptions = new QueryRequestOptions 
+                { 
+                    PartitionKey = new PartitionKey(documentId) 
+                };
+
+                var query = _signaturesContainer.GetItemQueryIterator<DocumentSignature>(queryDefinition, requestOptions: queryOptions);
+                var results = new List<DocumentSignature>();
+
+                while (query.HasMoreResults)
+                {
+                    var response = await query.ReadNextAsync();
+                    results.AddRange(response.ToList());
+                }
+
+                return results;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao buscar assinaturas do documento {DocumentId}", documentId);
+                throw;
+            }
+        }
+
+        public async Task<bool> DocumentHasSignaturesAsync(int documentId)
+        {
+             try
+            {
+                var queryDefinition = new QueryDefinition("SELECT VALUE COUNT(1) FROM c");
+                var queryOptions = new QueryRequestOptions 
+                { 
+                    PartitionKey = new PartitionKey(documentId) 
+                };
+
+                var query = _signaturesContainer.GetItemQueryIterator<int>(queryDefinition, requestOptions: queryOptions);
+                
+                if (query.HasMoreResults)
+                {
+                    var response = await query.ReadNextAsync();
+                    return response.FirstOrDefault() > 0;
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao verificar a existência de assinaturas para o documento {DocumentId}", documentId);
+                return false; // Assumir que não há assinaturas em caso de erro
+            }
         }
     }
 }

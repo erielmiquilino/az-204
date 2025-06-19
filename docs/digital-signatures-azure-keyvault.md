@@ -6,7 +6,6 @@
 2. [Como Funciona a Assinatura Digital](#como-funciona-a-assinatura-digital)
 3. [Azure Key Vault no Processo](#azure-key-vault-no-processo)
 4. [Implementação no SecureDocManager](#implementação-no-securedocmanager)
-5. [Próximos Passos](#próximos-passos)
 
 ## Conceitos de Assinatura Digital
 
@@ -264,36 +263,6 @@ public class DocumentSignature
      }
    }
    ```
-
-## Próximos Passos
-
-### 1. Implementação Básica
-
-- [ ] Criar serviço de assinatura no backend
-- [ ] Integrar com Azure Key Vault
-- [ ] Implementar endpoint de assinatura na API
-- [ ] Atualizar UI para mostrar status de assinatura
-
-### 2. Funcionalidades Avançadas
-
-- [ ] Múltiplas assinaturas por documento
-- [ ] Workflow de aprovação
-- [ ] Verificação de assinatura independente
-- [ ] Exportação com certificado embarcado
-
-### 3. Conformidade e Segurança
-
-- [ ] Implementar timestamping (carimbo de tempo)
-- [ ] Adicionar suporte a diferentes algoritmos
-- [ ] Criar relatórios de auditoria
-- [ ] Implementar verificação de revogação
-
-### 4. Melhorias de UX
-
-- [ ] Preview do documento antes de assinar
-- [ ] Notificações de documentos para assinar
-- [ ] Dashboard de documentos assinados
-- [ ] Histórico de assinaturas
 
 ### Código de Exemplo
 

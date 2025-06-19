@@ -41,39 +41,85 @@ else
 
 // Configurar Key Vault para connection strings
 var keyVaultUrl = builder.Configuration["KeyVault:Url"];
+Console.WriteLine($"Key Vault URL: {keyVaultUrl}");
+
 if (!string.IsNullOrEmpty(keyVaultUrl))
 {
-    var credential = new DefaultAzureCredential();
-    var secretClient = new SecretClient(new Uri(keyVaultUrl), credential);
-    builder.Services.AddSingleton(secretClient);
-
-    // Buscar connection strings do Key Vault
     try
     {
-        // SQL Database Connection String
-        var sqlConnectionSecret = secretClient.GetSecret("SqlDatabaseConnectionString");
-        builder.Configuration["ConnectionStrings:SqlDatabase"] = sqlConnectionSecret.Value.Value;
+        // Configurar DefaultAzureCredential para desenvolvimento local
+        var credentialOptions = new DefaultAzureCredentialOptions
+        {
+            ExcludeVisualStudioCredential = false,
+            ExcludeAzureCliCredential = false,
+            ExcludeEnvironmentCredential = false,
+            ExcludeInteractiveBrowserCredential = !builder.Environment.IsDevelopment()
+        };
         
-        // Cosmos DB Connection String
-        var cosmosConnectionSecret = secretClient.GetSecret("CosmosDBConnectionString");
-        builder.Configuration["ConnectionStrings:CosmosDB"] = cosmosConnectionSecret.Value.Value;
+        var credential = new DefaultAzureCredential(credentialOptions);
+        var secretClient = new SecretClient(new Uri(keyVaultUrl), credential);
+        builder.Services.AddSingleton(secretClient);
+
+        Console.WriteLine("Tentando conectar ao Key Vault...");
         
-        // Storage Connection String
-        var storageConnectionSecret = secretClient.GetSecret("StorageConnectionString");
-        builder.Configuration["ConnectionStrings:Storage"] = storageConnectionSecret.Value.Value;
+        // Buscar connection strings do Key Vault de forma síncrona durante a inicialização
+        try
+        {
+            // SQL Database Connection String
+            Console.WriteLine("Buscando DatabaseConnectionString...");
+            var sqlConnectionSecret = secretClient.GetSecret("DatabaseConnectionString");
+            builder.Configuration["ConnectionStrings:SqlDatabase"] = sqlConnectionSecret.Value.Value;
+            Console.WriteLine("✓ DatabaseConnectionString obtida com sucesso");
+            
+            // Cosmos DB Connection String
+            Console.WriteLine("Buscando CosmosDBConnectionString...");
+            var cosmosConnectionSecret = secretClient.GetSecret("CosmosDBConnectionString");
+            builder.Configuration["ConnectionStrings:CosmosDB"] = cosmosConnectionSecret.Value.Value;
+            Console.WriteLine("✓ CosmosDBConnectionString obtida com sucesso");
+            
+            // Storage Connection String
+            Console.WriteLine("Buscando StorageConnectionString...");
+            var storageConnectionSecret = secretClient.GetSecret("StorageConnectionString");
+            builder.Configuration["ConnectionStrings:Storage"] = storageConnectionSecret.Value.Value;
+            Console.WriteLine("✓ StorageConnectionString obtida com sucesso");
+            
+            Console.WriteLine("🎉 Todas as connection strings foram obtidas do Key Vault com sucesso!");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Erro ao buscar secrets do Key Vault: {ex.Message}");
+            Console.WriteLine($"Detalhes: {ex}");
+            
+            // Em desenvolvimento, tentar usar valores locais como fallback
+            if (builder.Environment.IsDevelopment())
+            {
+                Console.WriteLine("⚠️ Usando connection strings locais como fallback...");
+                // As connection strings locais serão usadas dos appsettings.Development.json
+            }
+            else
+            {
+                throw; // Em produção, falhar se não conseguir acessar o Key Vault
+            }
+        }
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"Erro ao buscar secrets do Key Vault: {ex.Message}");
-        // Em desenvolvimento, usar valores locais se Key Vault não estiver disponível
+        Console.WriteLine($"❌ Erro crítico ao configurar Key Vault: {ex.Message}");
         if (builder.Environment.IsDevelopment())
         {
-            Console.WriteLine("Usando connection strings locais para desenvolvimento.");
+            Console.WriteLine("⚠️ Continuando em modo de desenvolvimento sem Key Vault...");
+            // Registrar um SecretClient nulo para satisfazer a injeção de dependência
+            builder.Services.TryAddSingleton<SecretClient>(provider => null!);
+        }
+        else
+        {
+            throw;
         }
     }
 }
 else
 {
+    Console.WriteLine("⚠️ Key Vault URL não configurada. Usando configurações locais.");
     // Registrar um SecretClient nulo para satisfazer a injeção de dependência em desenvolvimento
     builder.Services.TryAddSingleton<SecretClient>(provider => null!);
 }
@@ -151,16 +197,63 @@ else if (builder.Environment.IsDevelopment())
     }
 }
 
+// Configure HttpClient with timeout and retry policies
+builder.Services.AddHttpClient("AzureStorage", client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(10); // Aumentar timeout para uploads grandes
+})
+.ConfigurePrimaryHttpMessageHandler(() =>
+{
+    return new HttpClientHandler()
+    {
+        MaxConnectionsPerServer = 10,
+        UseProxy = false // Desabilitar proxy se estiver causando problemas
+    };
+});
+
 // Registrar serviços da aplicação
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddScoped<IKeyVaultService, KeyVaultService>();
-builder.Services.AddScoped<IDocumentService, DocumentService>();
+builder.Services.AddScoped<IDocumentService>(provider =>
+{
+    var context = provider.GetRequiredService<ApplicationDbContext>();
+    var keyVaultService = provider.GetRequiredService<IKeyVaultService>();
+    var cosmosService = provider.GetRequiredService<ICosmosService>();
+    var configuration = provider.GetRequiredService<IConfiguration>();
+    var logger = provider.GetRequiredService<ILogger<DocumentService>>();
+    var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+    var httpClient = httpClientFactory.CreateClient("AzureStorage");
+    
+    return new DocumentService(context, keyVaultService, cosmosService, configuration, logger, httpClient);
+});
 // Temporariamente comentado até resolver o problema do Microsoft Graph
 // builder.Services.AddScoped<IGraphService, GraphService>();
 builder.Services.AddScoped<ICosmosService, CosmosService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IDocumentSigningService, DocumentSigningService>();
+
+// Registrar BlobServiceClient
+builder.Services.AddSingleton<Azure.Storage.Blobs.BlobServiceClient>(provider =>
+{
+    var configuration = provider.GetRequiredService<IConfiguration>();
+    
+    // Tentar obter a connection string do Configuration (já preenchida do Key Vault)
+    var storageConnectionString = configuration.GetConnectionString("Storage");
+    
+    // Se não encontrar, tentar a configuração local
+    if (string.IsNullOrEmpty(storageConnectionString))
+    {
+        storageConnectionString = configuration["StorageConnectionString"];
+    }
+    
+    if (string.IsNullOrEmpty(storageConnectionString))
+    {
+        throw new InvalidOperationException("Storage connection string não configurada");
+    }
+    
+    return new Azure.Storage.Blobs.BlobServiceClient(storageConnectionString);
+});
 
 // Registrar um mock temporário do GraphService
 builder.Services.AddScoped<IGraphService>(provider => new MockGraphService());
@@ -194,23 +287,20 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Aplicar migrações automaticamente em desenvolvimento
-if (app.Environment.IsDevelopment())
+// Aplicar migrações automaticamente ao inicializar
+using (var scope = app.Services.CreateScope())
 {
-    using (var scope = app.Services.CreateScope())
+    try
     {
-        try
-        {
-            var dbContext = scope.ServiceProvider.GetService<ApplicationDbContext>();
-            if (dbContext != null)
-            {
-                dbContext.Database.Migrate();
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Erro ao aplicar migrações: {ex.Message}");
-        }
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        dbContext.Database.Migrate();
+        Console.WriteLine("✅ Migrações do banco de dados aplicadas com sucesso.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"❌ Erro ao aplicar as migrações do banco de dados: {ex.Message}");
+        // Em um ambiente de produção, você pode querer logar isso com mais detalhes
+        // e talvez impedir a aplicação de iniciar se o banco de dados não estiver acessível/atualizado.
     }
 }
 

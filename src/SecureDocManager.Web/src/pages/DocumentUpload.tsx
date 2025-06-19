@@ -33,7 +33,6 @@ const DocumentUpload: React.FC = () => {
   const [success, setSuccess] = useState(false);
   
   const [formData, setFormData] = useState({
-    title: "",
     description: "",
     departmentId: "",
     accessLevel: 2 as AccessLevel, // Default to Internal
@@ -79,14 +78,13 @@ const DocumentUpload: React.FC = () => {
 
     const uploadData = new FormData();
     uploadData.append("file", file);
-    uploadData.append("title", formData.title);
     uploadData.append("description", formData.description);
     uploadData.append("departmentId", formData.departmentId);
     uploadData.append("accessLevel", formData.accessLevel.toString());
     
-    // Adicionar tags como JSON
+    // Adicionar tags como string separada por vírgula
     if (formData.tags.length > 0) {
-      uploadData.append("tags", JSON.stringify(formData.tags));
+      uploadData.append("tags", formData.tags.join(","));
     }
 
     const response = await api.documents.upload(uploadData);
@@ -150,15 +148,6 @@ const DocumentUpload: React.FC = () => {
                 </FormHelperText>
               )}
             </FormControl>
-
-            {/* Título */}
-            <TextField
-              label="Título"
-              value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              required
-              fullWidth
-            />
 
             {/* Descrição */}
             <TextField
@@ -247,7 +236,7 @@ const DocumentUpload: React.FC = () => {
                 type="submit"
                 variant="contained"
                 startIcon={loading ? <CircularProgress size={20} /> : <UploadIcon />}
-                disabled={loading || !file || !formData.title || !formData.departmentId}
+                disabled={loading || !file || !formData.departmentId}
               >
                 {loading ? "Enviando..." : "Enviar Documento"}
               </Button>

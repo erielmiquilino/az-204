@@ -32,9 +32,10 @@ import {
   Visibility as ViewIcon,
   Upload as UploadIcon,
   VerifiedUser as SignIcon,
+  History as HistoryIcon,
 } from "@mui/icons-material";
 import { useApi } from "../services/api.service";
-import type { Document, AccessLevel } from "../types";
+import type { Document, AccessLevel, DocumentSignature } from "../types";
 
 const Documents: React.FC = () => {
   const navigate = useNavigate();
@@ -48,6 +49,8 @@ const Documents: React.FC = () => {
     departmentId: "",
     accessLevel: "" as AccessLevel | "",
   });
+  const [signaturesDialogOpen, setSignaturesDialogOpen] = useState(false);
+  const [documentSignatures, setDocumentSignatures] = useState<DocumentSignature[]>([]);
 
   const api = useApi();
 
@@ -78,7 +81,7 @@ const Documents: React.FC = () => {
   }, [loadDocuments]);
 
   const handleDownload = async (doc: Document) => {
-    const response = await api.documents.download(doc.id);
+    const response = await api.documents.download(doc.id.toString());
     
     if (response.success && response.data) {
       // Criar um blob e fazer download
@@ -97,7 +100,7 @@ const Documents: React.FC = () => {
   const handleDelete = async () => {
     if (!selectedDocument) return;
 
-    const response = await api.documents.delete(selectedDocument.id);
+    const response = await api.documents.delete(selectedDocument.id.toString());
     
     if (response.success) {
       setDocuments(documents.filter(doc => doc.id !== selectedDocument.id));
@@ -107,13 +110,22 @@ const Documents: React.FC = () => {
   };
 
   const handleSign = async (doc: Document) => {
-    const response = await api.documents.sign(doc.id);
+    setLoading(true);
+    const response = await api.documents.sign(doc.id.toString());
     
     if (response.success && response.data) {
-      // Atualizar o documento na lista
-      setDocuments(documents.map(item => 
-        item.id === doc.id ? response.data! : item
-      ));
+      // Recarregar documentos para atualizar o status
+      await loadDocuments();
+    }
+    setLoading(false);
+  };
+  
+  const handleViewSignatures = async (doc: Document) => {
+    setSelectedDocument(doc);
+    const response = await api.documents.getSignatures(doc.id.toString());
+    if (response.success && response.data) {
+      setDocumentSignatures(response.data);
+      setSignaturesDialogOpen(true);
     }
   };
 
@@ -232,7 +244,6 @@ const Documents: React.FC = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Título</TableCell>
               <TableCell>Arquivo</TableCell>
               <TableCell>Tamanho</TableCell>
               <TableCell>Enviado por</TableCell>
@@ -245,12 +256,11 @@ const Documents: React.FC = () => {
           <TableBody>
             {documents.map((document) => (
               <TableRow key={document.id}>
-                <TableCell>{document.title}</TableCell>
                 <TableCell>{document.fileName}</TableCell>
-                <TableCell>{formatFileSize(document.fileSize)}</TableCell>
-                <TableCell>{document.uploadedByName || document.uploadedBy}</TableCell>
+                <TableCell>{formatFileSize(document.fileSizeInBytes)}</TableCell>
+                <TableCell>{document.uploadedByUserName}</TableCell>
                 <TableCell>
-                  {new Date(document.uploadDate).toLocaleDateString("pt-BR")}
+                  {new Date(document.uploadedAt).toLocaleDateString("pt-BR")}
                 </TableCell>
                 <TableCell>
                   <Chip
@@ -298,6 +308,16 @@ const Documents: React.FC = () => {
                       <SignIcon />
                     </IconButton>
                   )}
+                  {document.isDigitallySigned && (
+                    <IconButton
+                      size="small"
+                      color="info"
+                      onClick={() => handleViewSignatures(document)}
+                      title="Ver assinaturas"
+                    >
+                      <HistoryIcon />
+                    </IconButton>
+                  )}
                   <IconButton
                     size="small"
                     color="error"
@@ -321,7 +341,7 @@ const Documents: React.FC = () => {
         <DialogTitle>Confirmar Exclusão</DialogTitle>
         <DialogContent>
           <Typography>
-            Tem certeza que deseja excluir o documento "{selectedDocument?.title}"?
+            Tem certeza que deseja excluir o documento "{selectedDocument?.fileName}"?
           </Typography>
           <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
             Esta ação não pode ser desfeita.
@@ -332,6 +352,63 @@ const Documents: React.FC = () => {
           <Button onClick={handleDelete} color="error" variant="contained">
             Excluir
           </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Dialog de assinaturas */}
+      <Dialog 
+        open={signaturesDialogOpen} 
+        onClose={() => setSignaturesDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          Assinaturas Digitais - {selectedDocument?.fileName}
+        </DialogTitle>
+        <DialogContent>
+          {documentSignatures.length === 0 ? (
+            <Typography color="textSecondary">
+              Nenhuma assinatura encontrada para este documento.
+            </Typography>
+          ) : (
+            <Stack spacing={2} sx={{ mt: 2 }}>
+              {documentSignatures.map((signature) => (
+                <Paper key={signature.id} sx={{ p: 2 }}>
+                  <Typography variant="subtitle1" fontWeight="bold">
+                    {signature.signedByName}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Email: {signature.signedByEmail}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Assinado em: {new Date(signature.signedAt).toLocaleString("pt-BR")}
+                  </Typography>
+                  <Typography variant="caption" color="textSecondary">
+                    Certificado: {signature.certificateThumbprint.substring(0, 20)}...
+                  </Typography>
+                  <Box sx={{ mt: 1 }}>
+                    {signature.isValid ? (
+                      <Chip 
+                        label="Assinatura Válida" 
+                        color="success" 
+                        size="small" 
+                        icon={<SignIcon />}
+                      />
+                    ) : (
+                      <Chip 
+                        label="Assinatura Inválida" 
+                        color="error" 
+                        size="small"
+                      />
+                    )}
+                  </Box>
+                </Paper>
+              ))}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSignaturesDialogOpen(false)}>Fechar</Button>
         </DialogActions>
       </Dialog>
     </Box>

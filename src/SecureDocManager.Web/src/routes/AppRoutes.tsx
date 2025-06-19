@@ -1,154 +1,32 @@
-import React, { lazy, Suspense } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
-import { CircularProgress, Box } from "@mui/material";
-import { useAuth } from "../contexts/useAuth";
-import { UserRole } from "../types";
+import React from 'react';
+import { Route, Routes } from 'react-router-dom';
 
-// Lazy load pages
-const Dashboard = lazy(() => import("../pages/Dashboard"));
-const Documents = lazy(() => import("../pages/Documents"));
-const DocumentUpload = lazy(() => import("../pages/DocumentUpload"));
-const Users = lazy(() => import("../pages/Users"));
-const Audit = lazy(() => import("../pages/Audit"));
-const Settings = lazy(() => import("../pages/Settings"));
-const Profile = lazy(() => import("../pages/Profile"));
-const NotFound = lazy(() => import("../pages/NotFound"));
-const AuthError = lazy(() => import("../pages/AuthError"));
-
-// Loading component
-const PageLoader = () => (
-  <Box
-    display="flex"
-    justifyContent="center"
-    alignItems="center"
-    minHeight="60vh"
-  >
-    <CircularProgress />
-  </Box>
-);
-
-// Protected Route component
-interface ProtectedRouteProps {
-  element: React.ReactElement;
-  allowedRoles?: UserRole[];
-}
-
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
-  element,
-  allowedRoles,
-}) => {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    return <PageLoader />;
-  }
-
-  if (!user) {
-    return <Navigate to="/" replace />;
-  }
-
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/unauthorized" replace />;
-  }
-
-  return element;
-};
+import Dashboard from '../pages/Dashboard';
+import Documents from '../pages/Documents';
+import DocumentUpload from '../pages/DocumentUpload';
+import DocumentViewer from '../pages/DocumentViewer';
+import Audit from '../pages/Audit';
+import Users from '../pages/Users';
+import Profile from '../pages/Profile';
+import Settings from '../pages/Settings';
+import NotFound from '../pages/NotFound';
+import AuthError from '../pages/AuthError';
 
 const AppRoutes: React.FC = () => {
   return (
-    <Suspense fallback={<PageLoader />}>
-      <Routes>
-        {/* Public routes */}
-        <Route path="/" element={<Dashboard />} />
-        
-        {/* Protected routes - All users */}
-        <Route
-          path="/documents"
-          element={
-            <ProtectedRoute
-              element={<Documents />}
-              allowedRoles={[UserRole.Admin, UserRole.Manager, UserRole.Employee]}
-            />
-          }
-        />
-        <Route
-          path="/documents/upload"
-          element={
-            <ProtectedRoute
-              element={<DocumentUpload />}
-              allowedRoles={[UserRole.Admin, UserRole.Manager, UserRole.Employee]}
-            />
-          }
-        />
-        <Route
-          path="/upload"
-          element={
-            <ProtectedRoute
-              element={<DocumentUpload />}
-              allowedRoles={[UserRole.Admin, UserRole.Manager, UserRole.Employee]}
-            />
-          }
-        />
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute
-              element={<Profile />}
-              allowedRoles={[UserRole.Admin, UserRole.Manager, UserRole.Employee]}
-            />
-          }
-        />
-        
-        {/* Protected routes - Admin and Manager */}
-        <Route
-          path="/audit"
-          element={
-            <ProtectedRoute
-              element={<Audit />}
-              allowedRoles={[UserRole.Admin, UserRole.Manager]}
-            />
-          }
-        />
-        
-        {/* Protected routes - Admin only */}
-        <Route
-          path="/users"
-          element={
-            <ProtectedRoute
-              element={<Users />}
-              allowedRoles={[UserRole.Admin]}
-            />
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            <ProtectedRoute
-              element={<Settings />}
-              allowedRoles={[UserRole.Admin]}
-            />
-          }
-        />
-        
-        {/* Unauthorized route */}
-        <Route
-          path="/unauthorized"
-          element={
-            <Box p={4} textAlign="center">
-              <h1>Acesso Negado</h1>
-              <p>Você não tem permissão para acessar esta página.</p>
-            </Box>
-          }
-        />
-        
-        {/* Auth error route */}
-        <Route path="/auth-error" element={<AuthError />} />
-        
-        {/* 404 route */}
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </Suspense>
+    <Routes>
+      <Route path="/" element={<Dashboard />} />
+      <Route path="/documents" element={<Documents />} />
+      <Route path="/documents/upload" element={<DocumentUpload />} />
+      <Route path="/documents/:id" element={<DocumentViewer />} />
+      <Route path="/audit" element={<Audit />} />
+      <Route path="/users" element={<Users />} />
+      <Route path="/profile" element={<Profile />} />
+      <Route path="/settings" element={<Settings />} />
+      <Route path="/auth-error" element={<AuthError />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
   );
 };
 
-export default AppRoutes; 
+export default AppRoutes;

@@ -5,6 +5,9 @@ using SecureDocManager.API.Data;
 using SecureDocManager.API.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
+using Azure.Core;
+using Polly;
+using Polly.Extensions.Http;
 
 namespace SecureDocManager.API.Services
 {
@@ -17,50 +20,166 @@ namespace SecureDocManager.API.Services
         private readonly ILogger<DocumentService> _logger;
         private BlobServiceClient? _blobServiceClient;
         private readonly string _containerName = "documents";
+        private readonly HttpClient _httpClient;
 
         public DocumentService(
             ApplicationDbContext context,
             IKeyVaultService keyVaultService,
             ICosmosService cosmosService,
             IConfiguration configuration,
-            ILogger<DocumentService> logger)
+            ILogger<DocumentService> logger,
+            HttpClient httpClient)
         {
             _context = context;
             _keyVaultService = keyVaultService;
             _cosmosService = cosmosService;
             _configuration = configuration;
             _logger = logger;
+            _httpClient = httpClient;
         }
 
         private async Task<BlobServiceClient> GetBlobServiceClientAsync()
         {
             if (_blobServiceClient == null)
             {
-                var connectionString = await _keyVaultService.GetStorageConnectionStringAsync();
-                _blobServiceClient = new BlobServiceClient(connectionString);
+                try
+                {
+                    var connectionString = await _keyVaultService.GetStorageConnectionStringAsync();
+                    
+                    // Configurar opções do cliente com timeout e retry policy mais simples
+                    var options = new BlobClientOptions()
+                    {
+                        Retry = {
+                            MaxRetries = 2,
+                            Delay = TimeSpan.FromSeconds(1),
+                            MaxDelay = TimeSpan.FromSeconds(5),
+                            Mode = RetryMode.Fixed
+                        }
+                    };
+                    
+                    _blobServiceClient = new BlobServiceClient(connectionString, options);
+                    
+                    _logger.LogInformation("BlobServiceClient criado com sucesso");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Erro ao criar BlobServiceClient");
+                    throw;
+                }
             }
             return _blobServiceClient;
         }
 
         private async Task<BlobContainerClient> GetContainerClientAsync()
         {
-            var blobServiceClient = await GetBlobServiceClientAsync();
-            var containerClient = blobServiceClient.GetBlobContainerClient(_containerName);
-            await containerClient.CreateIfNotExistsAsync(PublicAccessType.None);
-            return containerClient;
+            var maxRetries = 3;
+            var baseDelay = TimeSpan.FromSeconds(1);
+            
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                try
+                {
+                    var blobServiceClient = await GetBlobServiceClientAsync();
+                    var containerClient = blobServiceClient.GetBlobContainerClient(_containerName);
+                    
+                    // Verificar se o container existe antes de tentar criar
+                    var exists = await containerClient.ExistsAsync();
+                    if (!exists.Value)
+                    {
+                        _logger.LogInformation("Container '{ContainerName}' não existe, criando...", _containerName);
+                        var response = await containerClient.CreateAsync(PublicAccessType.None);
+                        _logger.LogInformation("Container '{ContainerName}' criado com sucesso", _containerName);
+                    }
+                    else
+                    {
+                        _logger.LogDebug("Container '{ContainerName}' já existe", _containerName);
+                    }
+
+                    return containerClient;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Tentativa {Attempt} de {MaxRetries} falhou ao obter container '{ContainerName}'", 
+                        attempt, maxRetries, _containerName);
+                    
+                    if (attempt == maxRetries)
+                    {
+                        _logger.LogError(ex, "Falha final ao obter/criar container '{ContainerName}' após {MaxRetries} tentativas", 
+                            _containerName, maxRetries);
+                        throw;
+                    }
+                    
+                    // Esperar antes da próxima tentativa com backoff exponencial
+                    var delay = TimeSpan.FromMilliseconds(baseDelay.TotalMilliseconds * Math.Pow(2, attempt - 1));
+                    await Task.Delay(delay);
+                }
+            }
+            
+            throw new InvalidOperationException("Não deveria chegar aqui");
         }
 
-        public async Task<Document> UploadDocumentAsync(Stream fileStream, string fileName, string userId, string departmentId)
+        public async Task<Document> UploadDocumentAsync(Stream fileStream, string fileName, string userId, string userName, string departmentId)
         {
             try
             {
+                _logger.LogInformation("Iniciando upload do documento {FileName} para o usuário {UserId}", fileName, userId);
+                
+                // Validar parâmetros
+                if (fileStream == null || !fileStream.CanRead)
+                    throw new ArgumentException("Stream de arquivo inválido");
+                
+                if (string.IsNullOrWhiteSpace(fileName))
+                    throw new ArgumentException("Nome do arquivo é obrigatório");
+                
                 // Gerar nome único para o blob
-                var blobName = $"{Guid.NewGuid()}/{fileName}";
+                var blobName = $"{departmentId}/{DateTime.UtcNow:yyyy/MM/dd}/{Guid.NewGuid()}/{fileName}";
                 var containerClient = await GetContainerClientAsync();
                 var blobClient = containerClient.GetBlobClient(blobName);
 
-                // Upload do arquivo
-                await blobClient.UploadAsync(fileStream, overwrite: true);
+                // Configurar opções de upload
+                var uploadOptions = new BlobUploadOptions
+                {
+                    HttpHeaders = new BlobHttpHeaders
+                    {
+                        ContentType = GetContentType(fileName)
+                    },
+                    Metadata = new Dictionary<string, string>
+                    {
+                        {"UploadedBy", userId},
+                        {"DepartmentId", departmentId},
+                        {"UploadedAt", DateTime.UtcNow.ToString("O")}
+                    }
+                };
+
+                // Upload do arquivo com retry manual
+                var maxUploadRetries = 2;
+                Exception? lastException = null;
+                
+                for (int attempt = 1; attempt <= maxUploadRetries; attempt++)
+                {
+                    try
+                    {
+                        fileStream.Position = 0; // Reset stream position
+                        await blobClient.UploadAsync(fileStream, uploadOptions, cancellationToken: CancellationToken.None);
+                        _logger.LogInformation("Upload concluído com sucesso para {FileName} na tentativa {Attempt}", fileName, attempt);
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        lastException = ex;
+                        _logger.LogWarning(ex, "Tentativa {Attempt} de upload falhou para {FileName}", attempt, fileName);
+                        
+                        if (attempt < maxUploadRetries)
+                        {
+                            await Task.Delay(TimeSpan.FromSeconds(attempt * 2));
+                        }
+                    }
+                }
+                
+                if (lastException != null && !await blobClient.ExistsAsync())
+                {
+                    throw lastException;
+                }
 
                 // Obter informações do arquivo
                 var properties = await blobClient.GetPropertiesAsync();
@@ -74,24 +193,37 @@ namespace SecureDocManager.API.Services
                     BlobStorageUrl = blobClient.Uri.ToString(),
                     DepartmentId = departmentId,
                     UploadedByUserId = userId,
-                    UploadedAt = DateTime.UtcNow
+                    UploadedByUserName = userName,
+                    UploadedAt = DateTime.UtcNow,
+                    ContentType = GetContentType(fileName)
                 };
 
                 _context.Documents.Add(document);
                 await _context.SaveChangesAsync();
 
-                // Criar registro no Cosmos DB para busca rápida
-                var cosmosDocument = new CosmosDocument
-                {
-                    DocumentId = document.Id,
-                    FileName = document.FileName,
-                    DepartmentId = departmentId,
-                    UploadedByUserId = userId,
-                    UploadedAt = document.UploadedAt,
-                    AccessLevel = document.AccessLevel
-                };
+                _logger.LogInformation("Documento {DocumentId} salvo no banco de dados", document.Id);
 
-                await _cosmosService.CreateDocumentAsync(cosmosDocument);
+                // Criar registro no Cosmos DB para busca rápida (não crítico)
+                try
+                {
+                    var cosmosDocument = new CosmosDocument
+                    {
+                        DocumentId = document.Id,
+                        FileName = document.FileName,
+                        DepartmentId = departmentId,
+                        UploadedByUserId = userId,
+                        UploadedAt = document.UploadedAt,
+                        AccessLevel = document.AccessLevel
+                    };
+
+                    await _cosmosService.CreateDocumentAsync(cosmosDocument);
+                    _logger.LogInformation("Documento {DocumentId} salvo no Cosmos DB", document.Id);
+                }
+                catch (Exception cosmosEx)
+                {
+                    _logger.LogWarning(cosmosEx, "Falha ao salvar no Cosmos DB, mas documento foi salvo no SQL");
+                    // Não falhar o upload por causa do Cosmos DB
+                }
 
                 return document;
             }
@@ -100,6 +232,25 @@ namespace SecureDocManager.API.Services
                 _logger.LogError(ex, "Erro ao fazer upload do documento {FileName}", fileName);
                 throw;
             }
+        }
+
+        private string GetContentType(string fileName)
+        {
+            var extension = Path.GetExtension(fileName).ToLowerInvariant();
+            return extension switch
+            {
+                ".pdf" => "application/pdf",
+                ".doc" => "application/msword",
+                ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ".xls" => "application/vnd.ms-excel",
+                ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ".txt" => "text/plain",
+                ".jpg" => "image/jpeg",
+                ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".gif" => "image/gif",
+                _ => "application/octet-stream"
+            };
         }
 
         public async Task<string> GenerateDownloadUrlAsync(string documentId, string userRole)
@@ -113,7 +264,11 @@ namespace SecureDocManager.API.Services
                 }
 
                 var containerClient = await GetContainerClientAsync();
-                var blobName = new Uri(document.BlobStorageUrl).Segments.Last();
+                
+                var blobUri = new Uri(document.BlobStorageUrl);
+                var pathAndQuery = blobUri.PathAndQuery;
+                var blobName = pathAndQuery.Substring(pathAndQuery.IndexOf('/', 1) + 1);
+
                 var blobClient = containerClient.GetBlobClient(blobName);
 
                 // Verificar se o blob existe
@@ -302,7 +457,11 @@ namespace SecureDocManager.API.Services
                 }
 
                 var containerClient = await GetContainerClientAsync();
-                var blobName = new Uri(document.BlobStorageUrl).Segments.Last();
+
+                var blobUri = new Uri(document.BlobStorageUrl);
+                var pathAndQuery = blobUri.PathAndQuery;
+                var blobName = pathAndQuery.Substring(pathAndQuery.IndexOf('/', 1) + 1);
+
                 var blobClient = containerClient.GetBlobClient(blobName);
 
                 if (!await blobClient.ExistsAsync())
@@ -317,6 +476,21 @@ namespace SecureDocManager.API.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Erro ao fazer download do documento {DocumentId}", documentId);
+                throw;
+            }
+        }
+        
+        public async Task<Document> UpdateDocumentAsync(Document document)
+        {
+            try
+            {
+                _context.Documents.Update(document);
+                await _context.SaveChangesAsync();
+                return document;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao atualizar documento {DocumentId}", document.Id);
                 throw;
             }
         }

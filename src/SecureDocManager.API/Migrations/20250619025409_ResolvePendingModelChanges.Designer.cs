@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SecureDocManager.API.Data;
 
@@ -11,9 +12,11 @@ using SecureDocManager.API.Data;
 namespace SecureDocManager.API.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250619025409_ResolvePendingModelChanges")]
+    partial class ResolvePendingModelChanges
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -83,8 +86,8 @@ namespace SecureDocManager.API.Migrations
                         .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("ContentType")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("DepartmentId")
                         .IsRequired()
@@ -92,7 +95,8 @@ namespace SecureDocManager.API.Migrations
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("Description")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("FileExtension")
                         .IsRequired()
@@ -113,11 +117,24 @@ namespace SecureDocManager.API.Migrations
                     b.Property<bool>("IsDigitallySigned")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsSigned")
+                        .HasColumnType("bit");
+
                     b.Property<DateTime?>("LastModifiedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("Tags")
+                    b.Property<string>("SignatureData")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("SignedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("SignedByUserId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Tags")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<DateTime>("UploadedAt")
                         .HasColumnType("datetime2");
@@ -128,7 +145,8 @@ namespace SecureDocManager.API.Migrations
 
                     b.Property<string>("UploadedByUserName")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<string>("UserId")
                         .HasColumnType("nvarchar(450)");

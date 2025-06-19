@@ -46,6 +46,7 @@ namespace SecureDocManager.API.Controllers
             try
             {
                 var userId = User.GetObjectId() ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var userName = User.Identity?.Name ?? "Unknown";
                 if (string.IsNullOrEmpty(userId))
                 {
                     return Unauthorized();
@@ -70,6 +71,7 @@ namespace SecureDocManager.API.Controllers
                     stream, 
                     dto.File.FileName, 
                     userId, 
+                    userName,
                     dto.DepartmentId);
 
                 // Atualizar com informações adicionais
@@ -109,7 +111,7 @@ namespace SecureDocManager.API.Controllers
                     UploadedAt = d.UploadedAt,
                     Description = d.Description,
                     AccessLevel = d.AccessLevel,
-                    IsSigned = d.IsSigned,
+                    IsDigitallySigned = d.IsDigitallySigned,
                     Tags = string.IsNullOrEmpty(d.Tags)
                         ? new List<string>()
                         : d.Tags.Split(',').Select(t => t.Trim()).ToList()
@@ -158,7 +160,7 @@ namespace SecureDocManager.API.Controllers
                     UploadedAt = document.UploadedAt,
                     Description = document.Description,
                     AccessLevel = document.AccessLevel,
-                    IsSigned = document.IsSigned,
+                    IsDigitallySigned = document.IsDigitallySigned,
                     DownloadUrl = downloadUrl,
                     Tags = string.IsNullOrEmpty(document.Tags) 
                         ? new List<string>() 
@@ -215,7 +217,7 @@ namespace SecureDocManager.API.Controllers
                     UploadedAt = d.UploadedAt,
                     Description = d.Description,
                     AccessLevel = d.AccessLevel,
-                    IsSigned = d.IsSigned,
+                    IsDigitallySigned = d.IsDigitallySigned,
                     Tags = string.IsNullOrEmpty(d.Tags)
                         ? new List<string>()
                         : d.Tags.Split(',').Select(t => t.Trim()).ToList()
@@ -230,43 +232,27 @@ namespace SecureDocManager.API.Controllers
             }
         }
 
-        [HttpPost("sign")]
-        [Authorize(Policy = "ManagerOrAdmin")]
-        public async Task<IActionResult> SignDocument([FromBody] DocumentSignDto dto)
+        [HttpPost("{id}/sign")]
+        public async Task<IActionResult> SignDocument(int id)
         {
             try
             {
-                var userId = User.GetObjectId();
+                var userId = User.GetObjectId() ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userId))
                 {
                     return Unauthorized();
                 }
 
-                // Criar URL de documento assinado
-                var signedDocumentUrl = await _documentSigningService.CreateSignedDocumentUrlAsync(dto.DocumentId, userId);
+                var userName = User.Identity?.Name ?? "Unknown";
+                var userEmail = User.FindFirst(ClaimTypes.Email)?.Value ?? User.FindFirst("preferred_username")?.Value ?? "";
 
-                // Atualizar documento como assinado
-                var document = await _documentService.GetDocumentByIdAsync(dto.DocumentId);
-                if (document == null)
-                {
-                    return NotFound();
-                }
+                // Assinar o documento
+                var signature = await _documentSigningService.SignDocumentAsync(id, userId, userEmail, userName);
 
-                document.IsSigned = true;
-                document.SignedAt = DateTime.UtcNow;
-                document.SignedByUserId = userId;
-                await _context.SaveChangesAsync();
+                // Retornar o documento atualizado para o frontend
+                var updatedDocument = await _documentService.GetDocumentByIdAsync(id);
 
-                return Ok(new 
-                { 
-                    message = "Documento assinado com sucesso",
-                    signedDocumentUrl = signedDocumentUrl
-                });
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                _logger.LogWarning(ex, "Acesso negado ao assinar documento");
-                return Forbid(ex.Message);
+                return Ok(updatedDocument);
             }
             catch (ArgumentException ex)
             {
@@ -280,28 +266,44 @@ namespace SecureDocManager.API.Controllers
             }
         }
 
-        [HttpPost("{id}/verify-signature")]
-        public async Task<IActionResult> VerifySignature(int id)
+        [HttpGet("{id}/signatures")]
+        public async Task<IActionResult> GetDocumentSignatures(int id)
         {
             try
             {
-                var signature = await _documentSigningService.GetDocumentSignatureAsync(id);
+                var signatures = await _documentSigningService.GetDocumentSignaturesAsync(id);
+                return Ok(signatures);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao obter assinaturas do documento {DocumentId}", id);
+                return StatusCode(500, "Erro ao processar requisição");
+            }
+        }
+
+        [HttpPost("{id}/verify-signature/{signatureId}")]
+        public async Task<IActionResult> VerifySignature(int id, string signatureId)
+        {
+            try
+            {
+                var isValid = await _documentSigningService.VerifySignatureAsync(id, signatureId);
                 
                 // Registrar verificação no log
-                var userId = User.GetObjectId() ?? "";
+                var userId = User.GetObjectId() ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
                 await _auditService.LogAccessAsync(
                     userId, 
                     User.Identity?.Name ?? "Unknown", 
                     id, 
                     "SignatureVerified", 
-                    HttpContext.Connection.RemoteIpAddress?.ToString()
+                    HttpContext.Connection.RemoteIpAddress?.ToString(),
+                    $"Assinatura {signatureId} verificada: {isValid}"
                 );
 
-                return Ok(signature);
+                return Ok(new { isValid, signatureId, verifiedAt = DateTime.UtcNow });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Erro ao verificar assinatura do documento {DocumentId}", id);
+                _logger.LogError(ex, "Erro ao verificar assinatura {SignatureId} do documento {DocumentId}", signatureId, id);
                 return StatusCode(500, "Erro ao verificar assinatura");
             }
         }

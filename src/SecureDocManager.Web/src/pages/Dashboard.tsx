@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Typography,
   Box,
@@ -45,67 +45,67 @@ const Dashboard: React.FC = () => {
 
   const api = useApi();
 
-  const loadDashboardData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      // Carregar dados em paralelo
-      const [documentsResponse, usersResponse, auditResponse] = await Promise.all([
-        api.documents.list(),
-        api.users.list(),
-        api.audit.list(),
-      ]);
-
-      if (documentsResponse.success && documentsResponse.data) {
-        const documents = documentsResponse.data;
-        const now = new Date();
-        const thisMonth = documents.filter(doc => {
-          const uploadDate = new Date(doc.uploadDate);
-          return uploadDate.getMonth() === now.getMonth() &&
-                 uploadDate.getFullYear() === now.getFullYear();
-        });
-
-        setStats(prev => ({
-          ...prev,
-          totalDocuments: documents.length,
-          documentsThisMonth: thisMonth.length,
-          publicDocuments: documents.filter(doc => doc.accessLevel === 1).length,
-          internalDocuments: documents.filter(doc => doc.accessLevel === 2).length,
-          confidentialDocuments: documents.filter(doc => doc.accessLevel === 3).length,
-          signedDocuments: documents.filter(doc => doc.isDigitallySigned).length,
-        }));
-      }
-
-      if (usersResponse.success && usersResponse.data) {
-        setStats(prev => ({
-          ...prev,
-          totalUsers: usersResponse.data!.length,
-        }));
-      }
-
-      if (auditResponse.success && auditResponse.data) {
-        const sortedActivities = auditResponse.data
-          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-          .slice(0, 5);
-        
-        setRecentActivities(sortedActivities);
-        setStats(prev => ({
-          ...prev,
-          recentActivities: auditResponse.data!.length,
-        }));
-      }
-    } catch (err) {
-      setError("Erro ao carregar dados do dashboard");
-      console.error(err);
-    }
-
-    setLoading(false);
-  }, []);
-
   useEffect(() => {
+    const loadDashboardData = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        // Carregar dados em paralelo
+        const [documentsResponse, usersResponse, auditResponse] = await Promise.all([
+          api.documents.list(),
+          api.users.list(),
+          api.audit.list(),
+        ]);
+
+        if (documentsResponse.success && documentsResponse.data) {
+          const documents = documentsResponse.data;
+          const now = new Date();
+          const thisMonth = documents.filter(doc => {
+            const uploadDate = new Date(doc.uploadedAt);
+            return uploadDate.getMonth() === now.getMonth() &&
+                   uploadDate.getFullYear() === now.getFullYear();
+          });
+
+          setStats(prev => ({
+            ...prev,
+            totalDocuments: documents.length,
+            documentsThisMonth: thisMonth.length,
+            publicDocuments: documents.filter(doc => doc.accessLevel === 1).length,
+            internalDocuments: documents.filter(doc => doc.accessLevel === 2).length,
+            confidentialDocuments: documents.filter(doc => doc.accessLevel === 3).length,
+            signedDocuments: documents.filter(doc => doc.isDigitallySigned).length,
+          }));
+        }
+
+        if (usersResponse.success && usersResponse.data) {
+          setStats(prev => ({
+            ...prev,
+            totalUsers: usersResponse.data!.length,
+          }));
+        }
+
+        if (auditResponse.success && auditResponse.data) {
+          const sortedActivities = auditResponse.data
+            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+            .slice(0, 5);
+          
+          setRecentActivities(sortedActivities);
+          setStats(prev => ({
+            ...prev,
+            recentActivities: auditResponse.data!.length,
+          }));
+        }
+      } catch (err) {
+        setError("Erro ao carregar dados do dashboard");
+        console.error(err);
+      }
+
+      setLoading(false);
+    };
+    
     loadDashboardData();
-  }, []);
+  }, [api]);
 
   const StatCard = ({ title, value, icon, color }: {
     title: string;

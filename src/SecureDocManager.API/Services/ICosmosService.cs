@@ -11,5 +11,11 @@ namespace SecureDocManager.API.Services
         Task DeleteDocumentAsync(string id, string departmentId);
         Task AddAccessHistoryAsync(string documentId, string departmentId, AccessHistoryEntry entry);
         Task<IEnumerable<CosmosDocument>> SearchDocumentsAsync(string searchTerm, string departmentId, string userRole);
+        
+        // Métodos para assinaturas
+        Task<DocumentSignature> SaveSignatureAsync(DocumentSignature signature);
+        Task<DocumentSignature?> GetSignatureAsync(string signatureId);
+        Task<IEnumerable<DocumentSignature>> GetDocumentSignaturesAsync(int documentId);
+        Task<bool> DocumentHasSignaturesAsync(int documentId);
     }
 }

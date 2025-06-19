@@ -42,6 +42,23 @@ namespace SecureDocManager.API.Services
                 // Não propagar a exceção para não afetar a operação principal
             }
         }
+        
+        public async Task LogDocumentActionAsync(int documentId, string userId, string action, string? ipAddress = null, string? details = null)
+        {
+            try
+            {
+                // Buscar o nome do usuário
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+                var userName = user?.DisplayName ?? userId;
+                
+                await LogAccessAsync(userId, userName, documentId, action, ipAddress, details);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating document action log for action {Action} by user {UserId}", action, userId);
+                // Não propagar a exceção para não afetar a operação principal
+            }
+        }
 
         public async Task<IEnumerable<AuditLog>> GetAuditLogsAsync(int? documentId = null, string? userId = null, 
             DateTime? startDate = null, DateTime? endDate = null)

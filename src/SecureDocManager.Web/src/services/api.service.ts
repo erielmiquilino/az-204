@@ -1,5 +1,5 @@
 import { useApiCall } from "../hooks/useApiCall";
-import type { DocumentFilterDto, Document, User, AuditLog } from "../types";
+import type { DocumentFilterDto, Document, User, AuditLog, DocumentSignature, SignDocumentResponse, VerifySignatureResponse, DocumentUploadResponse } from "../types";
 import { useMemo } from "react";
 
 // Helper function to convert object to query string
@@ -27,7 +27,7 @@ export const useApi = () => {
         api.get<Document>(`/documents/${id}`),
       
       upload: (formData: FormData) => 
-        api.uploadFile<Document>("/documents", formData, {
+        api.uploadFile<DocumentUploadResponse>("/documents/upload", formData, {
           showSuccess: true,
           successMessage: "Documento enviado com sucesso!"
         }),
@@ -48,9 +48,18 @@ export const useApi = () => {
         api.get<Blob>(`/documents/${id}/download`),
       
       sign: (id: string) => 
-        api.post<Document>(`/documents/${id}/sign`, {}, {
+        api.post<SignDocumentResponse>(`/documents/${id}/sign`, {}, {
           showSuccess: true,
           successMessage: "Documento assinado com sucesso!"
+        }),
+        
+      getSignatures: (id: string) =>
+        api.get<DocumentSignature[]>(`/documents/${id}/signatures`),
+        
+      verifySignature: (documentId: string, signatureId: string) =>
+        api.post<VerifySignatureResponse>(`/documents/${documentId}/verify-signature/${signatureId}`, {}, {
+          showSuccess: true,
+          successMessage: "Assinatura verificada!"
         }),
     },
     

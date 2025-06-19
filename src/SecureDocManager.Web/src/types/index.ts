@@ -18,22 +18,20 @@ export type UserRole = typeof UserRole[keyof typeof UserRole];
 
 // Document types
 export interface Document {
-  id: string;
-  title: string;
-  description?: string;
+  id: number;
   fileName: string;
-  fileSize: number;
-  mimeType: string;
-  uploadedBy: string;
-  uploadedByName?: string;
-  uploadDate: Date;
+  fileExtension: string;
+  fileSizeInBytes: number;
   departmentId: string;
-  tags?: string[];
+  uploadedByUserName?: string;
+  uploadedAt: string;
+  description?: string;
   accessLevel: AccessLevel;
-  isDigitallySigned?: boolean;
-  signedBy?: string;
-  signedDate?: Date;
+  isSigned: boolean;
+  isDigitallySigned: boolean;
+  tags: string[];
   downloadUrl?: string;
+  contentType: string;
 }
 
 export const AccessLevel = {
@@ -105,4 +103,35 @@ export interface AppState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+}
+
+// Document Signature types
+export interface DocumentSignature {
+  id: string;
+  documentId: number;
+  signedBy: string;
+  signedByName: string;
+  signedByEmail: string;
+  signedAt: Date;
+  certificateThumbprint: string;
+  isValid: boolean;
+  verifiedAt?: Date;
+}
+
+export interface SignDocumentResponse {
+  message: string;
+  signatureId: string;
+  signedAt: Date;
+  certificateThumbprint: string;
+}
+
+export interface VerifySignatureResponse {
+  isValid: boolean;
+  signatureId: string;
+  verifiedAt: Date;
+}
+
+export interface DocumentUploadResponse {
+  documentId: number;
+  message: string;
 } 

@@ -31,8 +31,11 @@ namespace SecureDocManager.API.Models.DTOs
         public string? Description { get; set; }
         public int AccessLevel { get; set; }
         public bool IsSigned { get; set; }
+        public bool IsDigitallySigned { get; set; }
         public string? DownloadUrl { get; set; }
         public List<string> Tags { get; set; } = new();
+        public int SignatureCount { get; set; }
+        public DateTime? LastSignedAt { get; set; }
     }
 
     public class DocumentSignDto
