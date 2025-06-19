@@ -268,6 +268,9 @@ namespace SecureDocManager.API.Services
                 var blobUri = new Uri(document.BlobStorageUrl);
                 var pathAndQuery = blobUri.PathAndQuery;
                 var blobName = pathAndQuery.Substring(pathAndQuery.IndexOf('/', 1) + 1);
+                
+                // Decodificar o nome do blob para lidar com espaços e caracteres especiais
+                blobName = Uri.UnescapeDataString(blobName);
 
                 var blobClient = containerClient.GetBlobClient(blobName);
 
@@ -461,6 +464,9 @@ namespace SecureDocManager.API.Services
                 var blobUri = new Uri(document.BlobStorageUrl);
                 var pathAndQuery = blobUri.PathAndQuery;
                 var blobName = pathAndQuery.Substring(pathAndQuery.IndexOf('/', 1) + 1);
+                
+                // Decodificar o nome do blob para lidar com espaços e caracteres especiais
+                blobName = Uri.UnescapeDataString(blobName);
 
                 var blobClient = containerClient.GetBlobClient(blobName);
 

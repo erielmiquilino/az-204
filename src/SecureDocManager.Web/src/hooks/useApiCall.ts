@@ -189,6 +189,38 @@ export const useApiCall = () => {
     }
   }, [acquireToken]);
 
+  const downloadFile = useCallback(async (
+    endpoint: string,
+    options: ApiCallOptions = {}
+  ): Promise<ApiResponse<Blob>> => {
+    try {
+      const token = await acquireToken();
+      const url = `${apiConfig.baseUrl}${endpoint}`;
+
+      const response = await fetch(url, {
+        ...options,
+        method: 'GET',
+        headers: {
+          ...options.headers,
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        toast.error(`Erro ao baixar arquivo: ${response.statusText}`);
+        return { success: false, error: response.statusText };
+      }
+
+      const blob = await response.blob();
+      return { success: true, data: blob };
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      toast.error(errorMessage);
+      return { success: false, error: errorMessage };
+    }
+  }, [acquireToken]);
+
   return useMemo(() => ({
     callApi,
     get,
@@ -196,5 +228,6 @@ export const useApiCall = () => {
     put,
     delete: del,
     uploadFile,
-  }), [callApi, get, post, put, del, uploadFile]);
+    downloadFile,
+  }), [callApi, get, post, put, del, uploadFile, downloadFile]);
 }; 

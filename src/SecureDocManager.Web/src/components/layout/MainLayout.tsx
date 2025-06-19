@@ -9,18 +9,17 @@ import List from "@mui/material/List";
 import Typography from "@mui/material/Typography";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
-import Badge from "@mui/material/Badge";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import {
   Menu as MenuIcon,
   ChevronLeft as ChevronLeftIcon,
   AccountCircle,
-  Notifications,
 } from "@mui/icons-material";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/useAuth";
 import MainListItems from "./listItems";
+import LogoCompact from "../../assets/logo-compact.svg";
 
 const drawerWidth = 240;
 
@@ -155,11 +154,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             >
               {getPageTitle(location.pathname)}
             </Typography>
-            <IconButton color="inherit">
-              <Badge badgeContent={4} color="secondary">
-                <Notifications />
-              </Badge>
-            </IconButton>
             <div>
               <IconButton
                 size="large"
@@ -197,10 +191,23 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             sx={{
               display: "flex",
               alignItems: "center",
-              justifyContent: "flex-end",
+              justifyContent: "space-between",
               px: [1],
             }}
           >
+            {open && (
+              <Box sx={{ pl: 1, pr: 1 }}>
+                <img 
+                  src={LogoCompact} 
+                  alt="SecureDocManager" 
+                  style={{ 
+                    height: 24, 
+                    maxWidth: drawerWidth - 80,
+                    objectFit: 'contain'
+                  }} 
+                />
+              </Box>
+            )}
             <IconButton onClick={toggleDrawer}>
               <ChevronLeftIcon />
             </IconButton>

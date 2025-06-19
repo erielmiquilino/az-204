@@ -350,6 +350,39 @@ namespace SecureDocManager.API.Controllers
             }
         }
 
+        [HttpGet("{id}/download")]
+        public async Task<IActionResult> DownloadDocument(int id)
+        {
+            try
+            {
+                var document = await _documentService.GetDocumentByIdAsync(id);
+                if (document == null)
+                {
+                    return NotFound("Documento não encontrado.");
+                }
+
+                // Opcional: Adicionar verificação de permissão aqui se necessário
+                // if (!await HasAccessToDocumentAsync(User.GetObjectId(), document, GetUserRole()))
+                // {
+                //     return Forbid();
+                // }
+
+                var fileBytes = await _documentService.DownloadDocumentAsync(id);
+
+                return File(fileBytes, document.ContentType, document.FileName);
+            }
+            catch (FileNotFoundException ex)
+            {
+                _logger.LogWarning(ex, "Arquivo do documento {DocumentId} não encontrado no storage.", id);
+                return NotFound(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao fazer download do documento {DocumentId}", id);
+                return StatusCode(500, "Erro ao processar o download.");
+            }
+        }
+
         private async Task<bool> HasAccessToDocumentAsync(string? userId, Document document, string userRole)
         {
             // Admin tem acesso total

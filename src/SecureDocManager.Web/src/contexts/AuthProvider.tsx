@@ -147,7 +147,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (inProgress === InteractionStatus.None) {
       fetchUserProfile();
     }
-  }, [inProgress]); // Removido fetchUserProfile das dependências para evitar loops
+  }, [inProgress, fetchUserProfile]);
 
   return (
     <AuthContext.Provider

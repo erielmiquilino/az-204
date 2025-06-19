@@ -285,7 +285,7 @@ const Documents: React.FC = () => {
                   <IconButton
                     size="small"
                     color="primary"
-                    onClick={() => window.open(`/documents/${document.id}`, "_blank")}
+                    onClick={() => navigate(`/documents/${document.id}`)}
                     title="Visualizar"
                   >
                     <ViewIcon />

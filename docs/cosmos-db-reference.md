@@ -1,4 +1,4 @@
-# Migração para CosmosDB - SecureDocManager
+# Referência Cosmos DB - SecureDocManager
 
 ## Por que migrar para CosmosDB?
 
@@ -87,10 +87,3 @@
 3. **Desnormalização Controlada**:
    - Nome do usuário no documento (evita JOINs)
    - Informações essenciais duplicadas para performance
-
-## Próximos Passos
-
-1. Deseja prosseguir com a migração completa para CosmosDB?
-2. Ou prefere manter SQL Server e apenas criar as migrations?
-
-A migração completa levará cerca de 30 minutos de refatoração.

@@ -1,4 +1,4 @@
-# Troubleshooting - Erro de Autenticação com Microsoft Graph
+# Guia de Troubleshooting - Autenticação e Microsoft Graph
 
 ## Erro: "Failed to fetch user profile from Graph"
 
@@ -97,3 +97,77 @@ Start-Process "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/authorize
 ```
 
 Se o login funcionar, mas o erro persistir, o problema está nas permissões ou configuração da aplicação.
+
+---
+
+## Correção de Autenticação - Backend API
+
+### Problemas Comuns
+
+1. **Erro 500 em /documents**: Incompatibilidade de versões do Microsoft.Graph
+2. **Erro 403 em outras rotas**: Configuração incorreta de autenticação
+
+### Configuração do Azure AD para a API
+
+1. **App Registration da API**:
+   - Verifique o Application (client) ID
+   - Verifique o Tenant ID
+   - **IMPORTANTE**: Crie um Client Secret se necessário
+
+2. **Expose an API**:
+   - Application ID URI: `api://seu-api-client-id`
+   - Scopes expostos: `api://seu-api-client-id/Documents.Read`
+
+3. **API Permissions**:
+   - Microsoft Graph: User.Read (Delegated)
+   - Conceda admin consent
+
+### Configuração do Backend
+
+Atualize o `appsettings.Development.json`:
+
+```json
+{
+  "AzureAd": {
+    "Instance": "https://login.microsoftonline.com/",
+    "Domain": "seu-dominio.com",
+    "TenantId": "seu-tenant-id",
+    "ClientId": "seu-api-client-id",
+    "ClientSecret": "seu-client-secret",
+    "Audience": "api://seu-api-client-id"
+  },
+  "MicrosoftGraph": {
+    "BaseUrl": "https://graph.microsoft.com/v1.0",
+    "Scopes": "User.Read"
+  }
+}
+```
+
+### Reiniciar Aplicações
+
+Após alterar as configurações:
+
+1. **Backend (API)**:
+
+   ```bash
+   dotnet clean
+   dotnet restore
+   dotnet build
+   dotnet run
+   ```
+
+2. **Frontend (React)**:
+
+   ```bash
+   npm install
+   npm run dev
+   ```
+
+### Verificação Final
+
+1. Faça login no frontend
+2. Abra o console do navegador (F12)
+3. Verifique se há mensagens de erro
+4. Teste chamadas à API
+
+Se ainda houver erros 403, verifique no console da API se o token está sendo validado corretamente.

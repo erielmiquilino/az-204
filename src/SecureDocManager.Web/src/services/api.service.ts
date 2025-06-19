@@ -45,7 +45,7 @@ export const useApi = () => {
         }),
       
       download: (id: string) => 
-        api.get<Blob>(`/documents/${id}/download`),
+        api.downloadFile(`/documents/${id}/download`),
       
       sign: (id: string) => 
         api.post<SignDocumentResponse>(`/documents/${id}/sign`, {}, {

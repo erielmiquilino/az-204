@@ -1,0 +1,19 @@
+<svg width="140" height="32" viewBox="0 0 140 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Ícone de documento com escudo -->
+  <g>
+    <!-- Documento -->
+    <rect x="2" y="6" width="16" height="20" rx="2" fill="#1976d2" opacity="0.9"/>
+    <rect x="4" y="9" width="12" height="1.5" rx="0.75" fill="white"/>
+    <rect x="4" y="12" width="8" height="1.5" rx="0.75" fill="white"/>
+    <rect x="4" y="15" width="10" height="1.5" rx="0.75" fill="white"/>
+    
+    <!-- Escudo de segurança -->
+    <path d="M 18 17 C 18 17 22 15 22 11 V 7 L 18 5 L 14 7 V 11 C 14 15 18 17 18 17 Z" fill="#0d47a1" stroke="#1976d2" stroke-width="0.5"/>
+    <path d="M 16.5 10 L 17.5 11 L 19.5 9" stroke="white" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  
+  <!-- Texto SecureDoc -->
+  <text x="28" y="22" font-family="Arial, sans-serif" font-size="14" font-weight="600" fill="#1976d2">
+    SecureDoc
+  </text>
+</svg> 
