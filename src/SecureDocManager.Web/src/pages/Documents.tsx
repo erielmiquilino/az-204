@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Typography,
   Box,
@@ -36,6 +37,7 @@ import { useApi } from "../services/api.service";
 import type { Document, AccessLevel } from "../types";
 
 const Documents: React.FC = () => {
+  const navigate = useNavigate();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -174,7 +176,7 @@ const Documents: React.FC = () => {
           <Button
             variant="contained"
             startIcon={<UploadIcon />}
-            href="/documents/upload"
+            onClick={() => navigate("/documents/upload")}
           >
             Novo Documento
           </Button>

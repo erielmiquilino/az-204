@@ -72,6 +72,15 @@ const AppRoutes: React.FC = () => {
           }
         />
         <Route
+          path="/documents/upload"
+          element={
+            <ProtectedRoute
+              element={<DocumentUpload />}
+              allowedRoles={[UserRole.Admin, UserRole.Manager, UserRole.Employee]}
+            />
+          }
+        />
+        <Route
           path="/upload"
           element={
             <ProtectedRoute

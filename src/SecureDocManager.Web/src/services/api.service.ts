@@ -1,5 +1,6 @@
 import { useApiCall } from "../hooks/useApiCall";
 import type { DocumentFilterDto, Document, User, AuditLog } from "../types";
+import { useMemo } from "react";
 
 // Helper function to convert object to query string
 const toQueryString = (obj: Record<string, unknown>): string => {
@@ -15,7 +16,7 @@ const toQueryString = (obj: Record<string, unknown>): string => {
 export const useApi = () => {
   const api = useApiCall();
   
-  return {
+  return useMemo(() => ({
     documents: {
       list: (filters?: DocumentFilterDto) => {
         const queryParams = filters ? `?${toQueryString(filters as Record<string, unknown>)}` : '';
@@ -82,5 +83,5 @@ export const useApi = () => {
       getByUser: (userId: string) => 
         api.get<AuditLog[]>(`/audit/user/${userId}`),
     },
-  };
+  }), [api]);
 }; 

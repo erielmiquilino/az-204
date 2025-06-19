@@ -9,14 +9,16 @@
 
 ## Análise de Entidades
 
-### Entidades Atuais no SQL Server:
+### Entidades Atuais no SQL Server
+
 - **Users**: Informações dos usuários
 - **Documents**: Metadados dos documentos
 - **AuditLogs**: Logs de auditoria
 
-### Design para CosmosDB:
+### Design para CosmosDB
 
 #### Container: users
+
 ```json
 {
   "id": "user-guid",
@@ -34,6 +36,7 @@
 ```
 
 #### Container: documents
+
 ```json
 {
   "id": "doc-guid",
@@ -53,6 +56,7 @@
 ```
 
 #### Container: audit
+
 ```json
 {
   "id": "audit-guid",
@@ -89,4 +93,4 @@
 1. Deseja prosseguir com a migração completa para CosmosDB?
 2. Ou prefere manter SQL Server e apenas criar as migrations?
 
-A migração completa levará cerca de 30 minutos de refatoração. 
+A migração completa levará cerca de 30 minutos de refatoração.

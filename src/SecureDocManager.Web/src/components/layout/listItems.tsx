@@ -6,7 +6,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Dashboard,
   Description as DocumentIcon,
-  CloudUpload,
   People,
   History,
   Settings,
@@ -34,12 +33,6 @@ const MainListItems = () => {
       text: 'Documentos',
       icon: <DocumentIcon />,
       path: '/documents',
-      roles: [UserRole.Admin, UserRole.Manager, UserRole.Employee],
-    },
-    {
-      text: 'Upload',
-      icon: <CloudUpload />,
-      path: '/documents/upload',
       roles: [UserRole.Admin, UserRole.Manager, UserRole.Employee],
     },
     {

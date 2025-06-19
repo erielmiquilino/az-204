@@ -3,6 +3,7 @@ import { InteractionRequiredAuthError } from "@azure/msal-browser";
 import { loginRequest, apiConfig } from "../config/authConfig";
 import type { ApiResponse } from "../types";
 import toast from "react-hot-toast";
+import { useCallback, useMemo } from "react";
 
 interface ApiCallOptions extends RequestInit {
   showError?: boolean;
@@ -13,7 +14,7 @@ interface ApiCallOptions extends RequestInit {
 export const useApiCall = () => {
   const { instance, accounts } = useMsal();
 
-  const acquireToken = async () => {
+  const acquireToken = useCallback(async () => {
     const request = {
       ...loginRequest,
       account: accounts[0],
@@ -30,9 +31,9 @@ export const useApiCall = () => {
       }
       throw error;
     }
-  };
+  }, [accounts, instance]);
 
-  const callApi = async <T>(
+  const callApi = useCallback(async <T>(
     endpoint: string,
     options: ApiCallOptions = {}
   ): Promise<ApiResponse<T>> => {
@@ -97,35 +98,35 @@ export const useApiCall = () => {
         error: errorMessage,
       };
     }
-  };
+  }, [acquireToken]);
 
   // Convenience methods
-  const get = <T>(endpoint: string, options?: ApiCallOptions) => {
+  const get = useCallback(<T>(endpoint: string, options?: ApiCallOptions) => {
     return callApi<T>(endpoint, { ...options, method: "GET" });
-  };
+  }, [callApi]);
 
-  const post = <T, D = unknown>(endpoint: string, data: D, options?: ApiCallOptions) => {
+  const post = useCallback(<T, D = unknown>(endpoint: string, data: D, options?: ApiCallOptions) => {
     return callApi<T>(endpoint, {
       ...options,
       method: "POST",
       body: JSON.stringify(data),
     });
-  };
+  }, [callApi]);
 
-  const put = <T, D = unknown>(endpoint: string, data: D, options?: ApiCallOptions) => {
+  const put = useCallback(<T, D = unknown>(endpoint: string, data: D, options?: ApiCallOptions) => {
     return callApi<T>(endpoint, {
       ...options,
       method: "PUT",
       body: JSON.stringify(data),
     });
-  };
+  }, [callApi]);
 
-  const del = <T>(endpoint: string, options?: ApiCallOptions) => {
+  const del = useCallback(<T>(endpoint: string, options?: ApiCallOptions) => {
     return callApi<T>(endpoint, { ...options, method: "DELETE" });
-  };
+  }, [callApi]);
 
   // Special method for file upload
-  const uploadFile = async <T>(
+  const uploadFile = useCallback(async <T>(
     endpoint: string,
     formData: FormData,
     options?: ApiCallOptions
@@ -186,14 +187,14 @@ export const useApiCall = () => {
         error: errorMessage,
       };
     }
-  };
+  }, [acquireToken]);
 
-  return {
+  return useMemo(() => ({
     callApi,
     get,
     post,
     put,
     delete: del,
     uploadFile,
-  };
+  }), [callApi, get, post, put, del, uploadFile]);
 }; 

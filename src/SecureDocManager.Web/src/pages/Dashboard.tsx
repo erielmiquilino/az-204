@@ -101,11 +101,11 @@ const Dashboard: React.FC = () => {
     }
 
     setLoading(false);
-  }, [api.audit, api.documents, api.users]);
+  }, []);
 
   useEffect(() => {
     loadDashboardData();
-  }, [loadDashboardData]);
+  }, []);
 
   const StatCard = ({ title, value, icon, color }: {
     title: string;
